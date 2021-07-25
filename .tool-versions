@@ -1,0 +1,4 @@
+elixir 1.12.2-otp-24
+erlang 24.0.3
+python 2.7.18
+nodejs lts-fermium
