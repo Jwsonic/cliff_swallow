@@ -5,6 +5,8 @@ defmodule Ui.Application do
 
   use Application
 
+  alias Ui.Printer.Supervisor, as: PrinterSupervisor
+
   def start(_type, _args) do
     children = [
       # Start the Telemetry supervisor
@@ -12,9 +14,8 @@ defmodule Ui.Application do
       # Start the PubSub system
       {Phoenix.PubSub, name: Ui.PubSub},
       # Start the Endpoint (http/https)
-      UiWeb.Endpoint
-      # Start a worker by calling: Ui.Worker.start_link(arg)
-      # {Ui.Worker, arg}
+      UiWeb.Endpoint,
+      PrinterSupervisor
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
