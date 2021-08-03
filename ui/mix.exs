@@ -33,7 +33,7 @@ defmodule Ui.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.5.9"},
+      {:phoenix, github: "phoenixframework/phoenix", branch: "v1.5", override: true},
       {:phoenix_live_view, "~> 0.15.1"},
       {:phoenix_html, "~> 2.11"},
       {:phoenix_live_dashboard, "~> 0.4"},
@@ -43,6 +43,7 @@ defmodule Ui.MixProject do
       {:jason, "~> 1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:norm, "~> 0.13.0"},
+      {:esbuild, "~> 0.1", runtime: Mix.env() == :dev},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:floki, ">= 0.30.0", only: :test},
       {:stream_data, "~> 0.5.0", only: :test}
@@ -57,7 +58,12 @@ defmodule Ui.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "cmd npm install --prefix assets"]
+      setup: ["deps.get", "cmd npm install --prefix assets"],
+      "assets.deploy": [
+        "cmd --cd assets npm run deploy",
+        "esbuild default --minify",
+        "phx.digest"
+      ]
     ]
   end
 end
