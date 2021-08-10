@@ -1,7 +1,7 @@
-defmodule Ui.Printer.Virtual.Supervisor do
+defmodule Ui.Printer.Config.Supervisor do
   use DynamicSupervisor
 
-  alias Ui.Printer.Virtual.Server, as: VirtualServer
+  alias Ui.Printer.Config.VirtualServer
 
   def start_link(args) do
     DynamicSupervisor.start_link(__MODULE__, args, name: __MODULE__)

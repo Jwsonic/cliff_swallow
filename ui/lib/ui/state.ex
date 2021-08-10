@@ -1,4 +1,4 @@
-defmodule Ui.Printer do
+defmodule Ui.Printer.State do
   defstruct [:config, :status]
 
   import Norm

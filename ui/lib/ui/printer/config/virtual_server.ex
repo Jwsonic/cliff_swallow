@@ -1,4 +1,4 @@
-defmodule Ui.Printer.Virtual.Server do
+defmodule Ui.Printer.Config.VirtualServer do
   @moduledoc """
   Manages a 'virtual' printer from Octoprint.
   """
