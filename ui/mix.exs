@@ -43,6 +43,7 @@ defmodule Ui.MixProject do
       {:jason, "~> 1.0"},
       {:plug_cowboy, "~> 2.0"},
       {:norm, "~> 0.13.0"},
+      {:surface, "~> 0.5.0"},
       {:esbuild, "~> 0.1", runtime: Mix.env() == :dev},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:floki, ">= 0.30.0", only: :test},
