@@ -1,9 +1,9 @@
 defmodule Ui.Printer.State do
-  defstruct [:config, :status]
+  defstruct [:connection, :status]
 
   import Norm
 
-  alias Ui.Printer.Config.{InMemory, Serial, Virtual}
+  alias Ui.Printer.Connection.{InMemory, Serial, Virtual}
 
   @status one_of([
             :disconnected,
@@ -13,15 +13,17 @@ defmodule Ui.Printer.State do
             :printing
           ])
 
-  @config one_of([
-            InMemory.s(),
-            Serial.s(),
-            Virtual.s()
-          ])
+  defp connection do
+    one_of([
+      InMemory.s(),
+      Serial.s(),
+      Virtual.s()
+    ])
+  end
 
   def s do
     schema(%__MODULE__{
-      config: @config,
+      connection: connection(),
       status: @status
     })
   end

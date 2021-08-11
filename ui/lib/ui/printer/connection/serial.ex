@@ -1,7 +1,7 @@
-defmodule Ui.Printer.Config.Serial do
+defmodule Ui.Printer.Connection.Serial do
   defstruct []
 
-  defimpl Ui.Printer.Config, for: Ui.Printer.Config.Serial do
+  defimpl Ui.Printer.Connection, for: Ui.Printer.Connection.Serial do
     def connect(config), do: {:ok, config}
     def disconnect(_config), do: :ok
   end

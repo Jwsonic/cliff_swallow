@@ -1,7 +1,7 @@
-defmodule Ui.Printer.Config.InMemory do
+defmodule Ui.Printer.Connection.InMemory do
   defstruct []
 
-  defimpl Ui.Printer.Config, for: Ui.Printer.Config.InMemory do
+  defimpl Ui.Printer.Connection, for: Ui.Printer.Connection.InMemory do
     def connect(config), do: {:ok, config}
     def disconnect(_config), do: :ok
   end
