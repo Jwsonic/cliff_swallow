@@ -3,7 +3,6 @@ defmodule Ui.Printer.Supervisor do
 
   alias Ui.Printer.PubSub
   alias Ui.Printer.Server, as: PrinterServer
-  alias Ui.Printer.Connection.Supervisor, as: ConfigSupervisor
 
   def start_link(args) do
     Supervisor.start_link(__MODULE__, args, name: __MODULE__)
@@ -13,7 +12,6 @@ defmodule Ui.Printer.Supervisor do
   def init(_args) do
     children = [
       PubSub,
-      ConfigSupervisor,
       PrinterServer
     ]
 

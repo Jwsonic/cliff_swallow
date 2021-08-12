@@ -4,6 +4,8 @@ defmodule Ui.Printer.Server do
   """
   use GenServer
 
+  require Logger
+
   alias Ui.Printer.Connection
 
   def start_link(args) do
@@ -23,6 +25,10 @@ defmodule Ui.Printer.Server do
     end
   end
 
+  def handle_call({:connection, _connection}, _from, state) do
+    {:reply, {:error, "Already connected"}, state}
+  end
+
   @impl GenServer
   def handle_call({:send, command}, _from, %{connection: connection} = state) do
     reply = Connection.send(connection, command)
@@ -31,6 +37,12 @@ defmodule Ui.Printer.Server do
   end
 
   @impl GenServer
+  def handle_info({:connection_data, data}, state) do
+    Logger.info(data, label: :printer)
+
+    {:noreply, state}
+  end
+
   def handle_info(message, %{connection: connection} = state) do
     case Connection.update(connection, message) do
       {:ok, connection} -> {:noreply, %{state | connection: connection}}

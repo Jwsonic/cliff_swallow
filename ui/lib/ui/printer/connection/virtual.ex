@@ -5,9 +5,24 @@ defmodule Ui.Printer.Connection.Virtual do
 
   def s do
     schema(%__MODULE__{
-      port: spec(is_pid()),
-      reference: spec(is_reference())
+      port:
+        one_of([
+          spec(is_port()),
+          spec(is_nil())
+        ]),
+      reference:
+        one_of([
+          spec(is_reference()),
+          spec(is_nil())
+        ])
     })
+  end
+
+  def new do
+    %__MODULE__{
+      port: nil,
+      reference: nil
+    }
   end
 
   defimpl Ui.Printer.Connection, for: Ui.Printer.Connection.Virtual do
@@ -22,7 +37,11 @@ defmodule Ui.Printer.Connection.Virtual do
                   {:ok, Virtual.s()},
                   {:error, spec(is_binary())}
                 ])
-    def connect(_connection) do
+
+    def connect(%Virtual{
+          port: nil,
+          reference: nil
+        }) do
       python = System.find_executable("python3")
       priv_dir = :code.priv_dir(:ui)
       script = Path.join([priv_dir, "server.py"])
@@ -44,6 +63,10 @@ defmodule Ui.Printer.Connection.Virtual do
        }}
     end
 
+    def connect(connection) do
+      {:ok, connection}
+    end
+
     @contract disconnect(connection :: Virtual.s()) :: :ok
     def disconnect(%Virtual{port: port}) do
       Port.close(port)
@@ -56,6 +79,13 @@ defmodule Ui.Printer.Connection.Virtual do
                   :ok,
                   {:error, spec(is_binary())}
                 ])
+
+    def send(%Virtual{port: port, reference: reference}, _command)
+        when not is_port(port) or
+               not is_reference(reference) do
+      {:error, "Virtual printer not connected"}
+    end
+
     def send(%Virtual{port: port}, command) do
       port
       |> Port.command(command, [])
