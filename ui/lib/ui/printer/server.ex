@@ -2,22 +2,39 @@ defmodule Ui.Printer.Server do
   @moduledoc """
   GenServer responsible for keeping track of the current printer status.
   """
-
   use GenServer
 
-  alias Ui.Printer.Logic
+  alias Ui.Printer.Connection
 
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
   end
 
-  def init(args) do
-    state = Logic.init(args)
-
-    {:ok, state}
+  @impl GenServer
+  def init(_args) do
+    {:ok, %{connection: nil}}
   end
 
-  def handle_info(message, state) do
-    Logic.update(state, message)
+  @impl GenServer
+  def handle_call({:connect, connection}, _from, %{connection: nil} = state) do
+    case Connection.connect(connection) do
+      {:ok, connection} -> {:reply, :ok, %{state | connection: connection}}
+      {:error, _reason} = error -> {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call({:send, command}, _from, %{connection: connection} = state) do
+    reply = Connection.send(connection, command)
+
+    {:reply, reply, state}
+  end
+
+  @impl GenServer
+  def handle_info(message, %{connection: connection} = state) do
+    case Connection.update(connection, message) do
+      {:ok, connection} -> {:noreply, %{state | connection: connection}}
+      {:error, reason} -> {:stop, reason, connection}
+    end
   end
 end

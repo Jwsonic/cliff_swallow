@@ -9,4 +9,8 @@ defprotocol Ui.Printer.Connection do
 
   @spec send(connection :: t(), command :: String.t()) :: :ok | {:error, String.t()}
   def send(connection, command)
+
+  @spec update(connection :: t(), message :: any()) ::
+          {:ok, connection :: t()} | {:error, String.t()}
+  def update(connection, message)
 end
