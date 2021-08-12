@@ -45,6 +45,7 @@ defmodule Ui.MixProject do
       {:norm, "~> 0.13.0"},
       {:surface, "~> 0.5.0"},
       {:esbuild, "~> 0.1", runtime: Mix.env() == :dev},
+      {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:floki, ">= 0.30.0", only: :test},
       {:stream_data, "~> 0.5.0", only: :test}
@@ -64,7 +65,8 @@ defmodule Ui.MixProject do
         "cmd --cd assets npm run deploy",
         "esbuild default --minify",
         "phx.digest"
-      ]
+      ],
+      lint: "credo --config-file ../.credo.exs"
     ]
   end
 end
