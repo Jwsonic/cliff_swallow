@@ -6,7 +6,7 @@ defmodule Ui.Printer.Server do
 
   require Logger
 
-  alias Ui.Printer.Connection
+  alias Ui.Printer.{Connection, State}
 
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
@@ -14,11 +14,13 @@ defmodule Ui.Printer.Server do
 
   @impl GenServer
   def init(_args) do
-    {:ok, %{connection: nil}}
+    state = State.new()
+
+    {:ok, state}
   end
 
   @impl GenServer
-  def handle_call({:connect, connection}, _from, %{connection: nil} = state) do
+  def handle_call({:connect, connection}, _from, %State{connection: nil} = state) do
     case Connection.connect(connection) do
       {:ok, connection} -> {:reply, :ok, %{state | connection: connection}}
       {:error, _reason} = error -> {:reply, error, state}
@@ -30,7 +32,7 @@ defmodule Ui.Printer.Server do
   end
 
   @impl GenServer
-  def handle_call({:send, command}, _from, %{connection: connection} = state) do
+  def handle_call({:send, command}, _from, %State{connection: connection} = state) do
     reply = Connection.send(connection, command)
 
     {:reply, reply, state}
@@ -43,7 +45,7 @@ defmodule Ui.Printer.Server do
     {:noreply, state}
   end
 
-  def handle_info(message, %{connection: connection} = state) do
+  def handle_info(message, %State{connection: connection} = state) do
     case Connection.update(connection, message) do
       {:ok, connection} -> {:noreply, %{state | connection: connection}}
       {:error, reason} -> {:stop, reason, connection}
