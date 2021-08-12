@@ -1,4 +1,7 @@
 defmodule Ui.Printer.Connection.Serial do
+  @moduledoc """
+  Implements a `Ui.Printer.Connection` for USB Printers.
+  """
   defstruct []
 
   defimpl Ui.Printer.Connection, for: Ui.Printer.Connection.Serial do
@@ -8,5 +11,7 @@ defmodule Ui.Printer.Connection.Serial do
 
   import Norm
 
-  def s(), do: schema(%__MODULE__{})
+  def s do
+    schema(%__MODULE__{})
+  end
 end

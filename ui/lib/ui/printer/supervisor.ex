@@ -1,4 +1,7 @@
 defmodule Ui.Printer.Supervisor do
+  @moduledoc """
+  Supervisor for processes in the Printer domain.
+  """
   use Supervisor
 
   alias Ui.Printer.PubSub

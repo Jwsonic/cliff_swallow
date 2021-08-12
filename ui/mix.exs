@@ -66,7 +66,7 @@ defmodule Ui.MixProject do
         "esbuild default --minify",
         "phx.digest"
       ],
-      lint: "credo --config-file ../.credo.exs"
+      lint: "credo --strict --all --config-file ../.credo.exs"
     ]
   end
 end

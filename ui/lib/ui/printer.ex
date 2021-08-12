@@ -1,4 +1,7 @@
 defmodule Ui.Printer do
+  @moduledoc """
+  API for the `Ui.Printer` domain.
+  """
   alias Ui.Printer.Server, as: PrinterServer
 
   def connect(connection) do

@@ -1,4 +1,7 @@
 defmodule Ui.Printer.Connection.Virtual do
+  @moduledoc """
+  Implements a `Ui.Printer.Connection` to OctoPrint's virtual printer plugin
+  """
   defstruct [:port, :reference]
 
   import Norm

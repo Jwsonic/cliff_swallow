@@ -1,4 +1,7 @@
 defmodule Ui.Printer.Connection.InMemory do
+  @moduledoc """
+  Implements a `Ui.Printer.Connection` that uses a function to emulate a `Ui.Printer`.
+  """
   defstruct []
 
   defimpl Ui.Printer.Connection, for: Ui.Printer.Connection.InMemory do
@@ -8,5 +11,7 @@ defmodule Ui.Printer.Connection.InMemory do
 
   import Norm
 
-  def s(), do: schema(%__MODULE__{})
+  def s do
+    schema(%__MODULE__{})
+  end
 end

@@ -1,4 +1,5 @@
 defmodule UiWeb.PageLive do
+  @moduledoc false
   use UiWeb, :live_view
 
   @impl true
