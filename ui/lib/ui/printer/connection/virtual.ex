@@ -4,20 +4,12 @@ defmodule Ui.Printer.Connection.Virtual do
   """
   defstruct [:port, :reference]
 
-  import Norm
+  use Norms
 
   def s do
     schema(%__MODULE__{
-      port:
-        one_of([
-          spec(is_port()),
-          spec(is_nil())
-        ]),
-      reference:
-        one_of([
-          spec(is_reference()),
-          spec(is_nil())
-        ])
+      port: allow_nil(spec(is_port())),
+      reference: allow_nil(spec(is_reference()))
     })
   end
 
@@ -29,18 +21,13 @@ defmodule Ui.Printer.Connection.Virtual do
   end
 
   defimpl Ui.Printer.Connection, for: Ui.Printer.Connection.Virtual do
-    use Norm
+    use Norms
 
     require Logger
 
     alias Ui.Printer.Connection.Virtual
 
-    @contract connect(connection :: Virtual.s()) ::
-                one_of([
-                  {:ok, Virtual.s()},
-                  {:error, spec(is_binary())}
-                ])
-
+    @contract connect(connection :: Virtual.s()) :: result(Virtual.s())
     def connect(%Virtual{
           port: nil,
           reference: nil
@@ -77,12 +64,7 @@ defmodule Ui.Printer.Connection.Virtual do
       :ok
     end
 
-    @contract send(connection :: Virtual.s(), command :: spec(is_binary())) ::
-                one_of([
-                  :ok,
-                  {:error, spec(is_binary())}
-                ])
-
+    @contract send(connection :: Virtual.s(), command :: spec(is_binary())) :: simple_result()
     def send(%Virtual{port: port, reference: reference}, _command)
         when not is_port(port) or
                not is_reference(reference) do
@@ -98,11 +80,7 @@ defmodule Ui.Printer.Connection.Virtual do
       end
     end
 
-    @contract update(connection :: Virtual.s(), message :: spec(fn _ -> true end)) ::
-                one_of([
-                  {:ok, Virtual.s()},
-                  {:error, spec(is_binary())}
-                ])
+    @contract update(connection :: Virtual.s(), message :: any_()) :: result(Virtual.s())
     def update(%Virtual{port: port} = connection, {port, {:data, data}}) do
       Process.send(self(), {:connection_data, data}, [])
 
