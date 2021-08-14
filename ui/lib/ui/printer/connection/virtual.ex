@@ -28,6 +28,11 @@ defmodule Ui.Printer.Connection.Virtual do
     alias Ui.Printer.Connection.Virtual
 
     @contract connect(connection :: Virtual.s()) :: result(Virtual.s())
+    def connect(%Virtual{port: port} = connection)
+        when is_port(port) do
+      {:ok, connection}
+    end
+
     def connect(%Virtual{
           port: nil,
           reference: nil
@@ -59,7 +64,9 @@ defmodule Ui.Printer.Connection.Virtual do
 
     @contract disconnect(connection :: Virtual.s()) :: :ok
     def disconnect(%Virtual{port: port}) do
-      Port.close(port)
+      if is_port(port) and Port.info(port) != nil do
+        Port.close(port)
+      end
 
       :ok
     end

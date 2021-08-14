@@ -67,9 +67,13 @@ def start_printer_read_thread():
 
             if line != b'wait':
                 header = struct.pack('!I', len(line))
-                stream.write(header)
-                stream.write(line)
-                stream.flush()
+                
+                try:
+                    stream.write(header)
+                    stream.write(line)
+                    stream.flush()
+                except:
+                    pass
     
     read_thread = Thread(target=read_forever)
     read_thread.start()
