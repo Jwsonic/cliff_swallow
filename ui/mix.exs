@@ -48,8 +48,7 @@ defmodule Ui.MixProject do
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:floki, ">= 0.30.0", only: :test},
-      {:stream_data, "~> 0.5.0", only: :test},
-      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
+      {:stream_data, "~> 0.5.0", only: :test}
     ]
   end
 
@@ -67,7 +66,8 @@ defmodule Ui.MixProject do
         "esbuild default --minify",
         "phx.digest"
       ],
-      lint: "credo --strict --all --config-file ../.credo.exs"
+      lint: "credo --strict --all --config-file ../.credo.exs",
+      "test.watch": "cmd fswatch lib test | mix test --listen-on-stdin --stale --only wip"
     ]
   end
 end
