@@ -44,6 +44,7 @@ defmodule Ui.MixProject do
       {:plug_cowboy, "~> 2.0"},
       {:norm, "~> 0.13.0"},
       {:surface, "~> 0.5.0"},
+      {:circuits_uart, "~> 1.3"},
       {:esbuild, "~> 0.1", runtime: Mix.env() == :dev},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
