@@ -40,6 +40,7 @@ defmodule Ui.Printer.Connection.SerialTest do
   describe "Serial.connect/1" do
     @tag :no_connect
     test "it spawns a virtual printer port", %{connection: connection} do
+      IO.inspect("Serial")
       assert connection.port == nil
       assert connection.reference == nil
 
