@@ -7,8 +7,19 @@ defmodule Ui.Printer.Connection.SerialTest do
   alias Ui.Printer.Connection
   alias Ui.Printer.Connection.Serial
 
+  @dev0 "/dev/tnt0"
+  @dev1 "/dev/tnt1"
+
+  @moduletag :tty0tty_required
+
   setup context do
-    connection = Serial.new()
+    unless File.exists?(@dev0) && File.exists?(@dev1) do
+      flunk(
+        "Please make sure tty0tty(https://github.com/freemed/tty0tty) is installed before running this test."
+      )
+    end
+
+    connection = Serial.new(name: @dev0, speed: 9600)
 
     connection =
       case context[:no_connect] do
@@ -26,7 +37,7 @@ defmodule Ui.Printer.Connection.SerialTest do
     {:ok, %{connection: connection}}
   end
 
-  describe "Virtual.connect/1" do
+  describe "Serial.connect/1" do
     @tag :no_connect
     test "it spawns a virtual printer port", %{connection: connection} do
       assert connection.port == nil
@@ -51,7 +62,7 @@ defmodule Ui.Printer.Connection.SerialTest do
     end
   end
 
-  describe "Virtual.disconnect/1" do
+  describe "Serial.disconnect/1" do
     test "it closes a port if there's one open", %{connection: connection} do
       assert is_port(connection.port)
       assert is_reference(connection.reference)
@@ -70,7 +81,7 @@ defmodule Ui.Printer.Connection.SerialTest do
     end
   end
 
-  describe "Virtual.send/2" do
+  describe "Serial.send/2" do
     test "it sends the message to the given port/pid", %{connection: %{port: port} = connection} do
       :erlang.trace(port, true, [:receive])
 
@@ -82,7 +93,7 @@ defmodule Ui.Printer.Connection.SerialTest do
     end
   end
 
-  describe "Virtual.update/2" do
+  describe "Serial.update/2" do
     test "it forwards port messages as connection messages", %{
       connection: %{port: port} = connection
     } do
