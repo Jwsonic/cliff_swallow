@@ -112,9 +112,9 @@ def wait_until_parent_exits():
     # Our parent is whatever Elixir process that spawned us
     parent = os.getppid()
 
-    while psutil.pid_exists(parent):
+    while parent != 1 and psutil.pid_exists(parent):
         pass
-    
+
     # sys.exit doesn't seem to work properly, so we go for the kill
     os.kill(os.getpid(), signal.SIGKILL)
 
