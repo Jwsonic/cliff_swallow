@@ -67,8 +67,7 @@ defmodule Ui.MixProject do
         "esbuild default --minify",
         "phx.digest"
       ],
-      lint: "credo --strict --all --config-file ../.credo.exs",
-      "test.watch": "cmd fswatch lib test | mix test --listen-on-stdin --stale --only wip"
+      lint: "credo --strict --all --config-file ../.credo.exs"
     ]
   end
 end

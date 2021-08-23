@@ -4,6 +4,7 @@ defmodule Ui.Printer.Connection.SerialTest do
   """
   use ExUnit.Case, async: false
 
+  alias Circuits.UART
   alias Ui.Printer.Connection
   alias Ui.Printer.Connection.Serial
 
@@ -37,77 +38,82 @@ defmodule Ui.Printer.Connection.SerialTest do
     {:ok, %{connection: connection}}
   end
 
+  defp assert_pid_alive(pid) do
+    assert is_pid(pid)
+    assert Process.alive?(pid)
+  end
+
   describe "Serial.connect/1" do
     @tag :no_connect
-    test "it spawns a virtual printer port", %{connection: connection} do
-      IO.inspect("Serial")
-      assert connection.port == nil
-      assert connection.reference == nil
+    test "it spawns serial printer connection", %{connection: connection} do
+      assert connection.pid == nil
 
       {:ok, connection} = Connection.connect(connection)
 
-      assert is_port(connection.port)
-      assert is_reference(connection.reference)
+      assert_pid_alive(connection.pid)
 
       Connection.disconnect(connection)
     end
 
     test "it does nothing if a port is already open", %{connection: connection} do
-      assert is_port(connection.port)
-      assert is_reference(connection.reference)
+      assert_pid_alive(connection.pid)
 
       {:ok, connection2} = Connection.connect(connection)
 
-      assert connection.port == connection2.port
-      assert connection.reference == connection2.reference
+      assert connection == connection2
+      assert_pid_alive(connection2.pid)
+    end
+
+    test "it starts UART in active mode" do
+      {:ok, pid} = UART.start_link()
+
+      :ok = UART.open(pid, @dev1, speed: 9600, active: false)
+
+      UART.write(pid, "ok\n")
+
+      assert_receive {:circuits_uart, @dev0, "ok"}
     end
   end
 
   describe "Serial.disconnect/1" do
+    @tag :no_connect
     test "it closes a port if there's one open", %{connection: connection} do
-      assert is_port(connection.port)
-      assert is_reference(connection.reference)
+      {:ok, connection} = Connection.connect(connection)
+
+      assert_pid_alive(connection.pid)
 
       Connection.disconnect(connection)
 
-      Port.info(connection.port)
+      refute Process.alive?(connection.pid)
     end
 
     @tag :no_connect
     test "it does nothing if there's no port open", %{connection: connection} do
-      assert connection.port == nil
-      assert connection.reference == nil
+      assert connection.pid == nil
 
       assert Connection.disconnect(connection) == :ok
     end
   end
 
   describe "Serial.send/2" do
-    test "it sends the message to the given port/pid", %{connection: %{port: port} = connection} do
-      :erlang.trace(port, true, [:receive])
+    test "it sends the message to the serial port", %{connection: connection} do
+      {:ok, pid} = UART.start_link()
 
-      me = self()
+      :ok = UART.open(pid, @dev1, speed: 9600, active: false)
 
-      Connection.send(connection, "G10\n")
+      Connection.send(connection, "G10")
 
-      assert_receive {:trace, ^port, :receive, {^me, {:command, "G10\n"}}}, 1_000
+      assert UART.read(pid) == {:ok, "G10\n"}
     end
   end
 
   describe "Serial.update/2" do
-    test "it forwards port messages as connection messages", %{
-      connection: %{port: port} = connection
+    test "it forwards pserial messages as connection messages", %{
+      connection: %{name: name} = connection
     } do
-      {:ok, _connection} = Connection.update(connection, {port, {:data, "test"}})
+      {:ok, _connection} = Connection.update(connection, {:circuits_uart, name, "test"})
 
       assert_receive {:connection_data, "test"}
-    end
-
-    test "it handles port close events", %{
-      connection: %{port: port, reference: reference} = connection
-    } do
-      assert {:error, ~s(Port closed: "It went boom")} ==
-               Connection.update(connection, {:DOWN, reference, :port, port, "It went boom"})
     end
 
     test "it ignores other messages", %{connection: connection} do
