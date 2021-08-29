@@ -7,7 +7,8 @@ defmodule Printer.MixProject do
       version: "0.1.0",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      aliases: aliases()
     ]
   end
 
@@ -28,6 +29,12 @@ defmodule Printer.MixProject do
        git: "https://github.com/Jwsonic/norms", ref: "96d0ec2b5492de0eaa8b6ce7afc1c37a46bfba48"},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 0.5.0", only: :test}
+    ]
+  end
+
+  defp aliases do
+    [
+      lint: "credo --strict --all --config-file ../.credo.exs"
     ]
   end
 end
