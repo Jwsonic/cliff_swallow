@@ -10,7 +10,8 @@ import struct
 import sys
 
 # Monkey patch VirtualEEPROM so it doesn't write a file
-VirtualEEPROM._initialise_eeprom = lambda _self: VirtualEEPROM.get_default_settings()
+VirtualEEPROM._initialise_eeprom = lambda _self: VirtualEEPROM.get_default_settings(
+)
 
 # Initialize the global plugin registry so the VirtualPrinterPlugin doesn't explode
 plugin_manager(True)
@@ -21,7 +22,6 @@ class DictSettings(object):
     The VirtualPrinter plugin expects a Settings object which does a lot of file I/O.
     DictSettings implements the methods VirtualPrinter expects, but backend by a dict.
     '''
-
     def __init__(self, settings):
         self._settings = settings
 
@@ -54,8 +54,10 @@ class DictSettings(object):
     def global_get_basefolder(self, _):
         return '.'
 
+
 settings = DictSettings(VirtualPrinterPlugin().get_settings_defaults())
 printer = VirtualPrinter(settings, '.')
+
 
 def start_printer_read_thread():
     def read_forever():
@@ -67,14 +69,14 @@ def start_printer_read_thread():
 
             if line != b'wait':
                 header = struct.pack('!I', len(line))
-                
+
                 try:
                     stream.write(header)
                     stream.write(line)
                     stream.flush()
                 except:
                     pass
-    
+
     read_thread = Thread(target=read_forever)
     read_thread.start()
 
@@ -89,8 +91,8 @@ def start_printer_write_thread():
         header = stream.read(4)
         if len(header) != 4:
             return None  # EOF
-    
-        (length,) = struct.unpack('!I', header)
+
+        (length, ) = struct.unpack('!I', header)
         payload = stream.read(length)
         if len(payload) != length:
             return None
@@ -99,14 +101,15 @@ def start_printer_write_thread():
 
     def write_forever():
         command = recv()
-        while command:
+        while True:
             printer.write(command)
-            message = recv()
+            command = recv()
 
     write_thread = Thread(target=write_forever)
     write_thread.start()
 
     return write_thread
+
 
 def wait_until_parent_exits():
     # Our parent is whatever Elixir process that spawned us
