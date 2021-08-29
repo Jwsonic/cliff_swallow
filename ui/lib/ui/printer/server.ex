@@ -22,7 +22,7 @@ defmodule Ui.Printer.Server do
   @impl GenServer
   def handle_call({:connect, connection}, _from, %State{connection: nil} = state) do
     case Connection.connect(connection) do
-      {:ok, connection} -> {:reply, :ok, %{state | connection: connection}}
+      {:ok, connection} -> {:reply, :ok, %{state | connection: connection, status: :connected}}
       {:error, _reason} = error -> {:reply, error, state}
     end
   end

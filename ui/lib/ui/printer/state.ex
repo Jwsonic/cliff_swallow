@@ -4,7 +4,7 @@ defmodule Ui.Printer.State do
   """
   defstruct [:connection, :status]
 
-  import Norm
+  use Norms
 
   def s do
     schema(%__MODULE__{
