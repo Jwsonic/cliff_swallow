@@ -46,6 +46,10 @@ defmodule Norms do
     )
   end
 
+  def int_or_float do
+    spec(is_integer() or is_float())
+  end
+
   defmacro __using__(_args) do
     quote do
       use Norm
