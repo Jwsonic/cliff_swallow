@@ -22,8 +22,12 @@ defmodule Printer.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:circuits_uart, "~> 1.3"},
+      {:phoenix_pubsub, "~> 2.0"},
+      {:norms,
+       git: "https://github.com/Jwsonic/norms", ref: "96d0ec2b5492de0eaa8b6ce7afc1c37a46bfba48"},
+      {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:stream_data, "~> 0.5.0", only: :test}
     ]
   end
 end
