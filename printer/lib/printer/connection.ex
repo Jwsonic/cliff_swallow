@@ -14,3 +14,10 @@ defprotocol Printer.Connection do
           {:ok, connection :: t()} | {:error, String.t()}
   def update(connection, message)
 end
+
+defimpl Printer.Connection, for: Any do
+  def connect(_connection), do: {:error, "Not a connection."}
+  def disconnect(_connection), do: :ok
+  def send(_connection, _message), do: {:error, "Not a connection."}
+  def update(_connection, _message), do: {:error, "Not a connection."}
+end

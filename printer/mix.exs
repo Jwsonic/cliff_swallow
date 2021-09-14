@@ -28,7 +28,8 @@ defmodule Printer.MixProject do
       {:norms,
        git: "https://github.com/Jwsonic/norms", ref: "96d0ec2b5492de0eaa8b6ce7afc1c37a46bfba48"},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:stream_data, "~> 0.5.0", only: :test}
+      {:stream_data, "~> 0.5.0", only: :test},
+      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
     ]
   end
 

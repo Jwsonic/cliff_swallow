@@ -14,7 +14,7 @@ defmodule Printer.Connection.InMemory do
   end
 
   def start do
-    with {:ok, pid} <- Agent.start_link(fn -> [] end) do
+    with {:ok, pid} <- Agent.start_link(fn -> [] end, timeout: 1_000) do
       {:ok,
        %__MODULE__{
          pid: pid
@@ -26,6 +26,12 @@ defmodule Printer.Connection.InMemory do
         pid: pid
       }) do
     Agent.get(pid, fn commands -> commands end)
+  end
+
+  def last_command(%__MODULE__{
+        pid: pid
+      }) do
+    Agent.get(pid, &List.first/1)
   end
 
   defimpl Printer.Connection, for: Printer.Connection.InMemory do
@@ -54,7 +60,9 @@ defmodule Printer.Connection.InMemory do
     end
 
     defp add_command(%InMemory{pid: pid}, command) do
-      Agent.update(pid, fn commands -> [command | commands] end)
+      if Process.alive?(pid) do
+        Agent.update(pid, fn commands -> [command | commands] end)
+      end
     end
   end
 end
