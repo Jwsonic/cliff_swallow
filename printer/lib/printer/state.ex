@@ -26,4 +26,10 @@ defmodule Printer.State do
       status: :disconnected
     }
   end
+
+  @contract update(state :: s(), updates :: spec(is_map())) :: s()
+  def update(%__MODULE__{} = state, updates) do
+    # TODO: Pubsub broadcast
+    Map.merge(state, updates)
+  end
 end

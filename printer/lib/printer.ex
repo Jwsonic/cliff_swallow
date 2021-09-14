@@ -7,22 +7,55 @@ defmodule Printer do
   alias Printer.Gcode
   alias Printer.Server, as: PrinterServer
 
-  def connect(connection) do
-    GenServer.call(PrinterServer, {:connect, connection})
+  @contract connect(connection :: any_(), opts :: coll_of(:override)) :: simple_result()
+  def connect(connection, opts \\ []) do
+    GenServer.call(PrinterServer, {:connect, connection, opts})
   end
 
-  def send(command) do
+  def disconnect do
+    GenServer.call(PrinterServer, :disconnect)
+  end
+
+  defp send(command) do
     GenServer.call(PrinterServer, {:send, command})
   end
 
   def move(args) do
     args
-    |> Gcode.move()
+    |> Gcode.g0()
     |> send()
   end
 
-  @contract heat(temp :: int_or_float()) :: simple_result()
-  def heat(temp) do
-    send("M109 S#{temp}\n")
+  @contract heat_hotend(temp :: int_or_float()) :: simple_result()
+  def heat_hotend(temp) do
+    temp
+    |> Gcode.m109()
+    |> send()
   end
+
+  def extrude(amount) do
+    [e: amount]
+    |> Gcode.g1()
+    |> send()
+  end
+
+  @contract start_temperature_report(interval :: spec(is_integer() and (&(&1 >= 0)))) ::
+              simple_result()
+  def start_temperature_report(interval) do
+    interval
+    |> Gcode.m155()
+    |> send()
+  end
+
+  @contract stop_temperature_report() :: simple_result()
+  def stop_temperature_report do
+    0
+    |> Gcode.m155()
+    |> send()
+  end
+
+  # home
+  # estop
+  # print
+  # heat bed
 end

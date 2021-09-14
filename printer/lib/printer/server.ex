@@ -19,16 +19,47 @@ defmodule Printer.Server do
     {:ok, state}
   end
 
-  @impl GenServer
-  def handle_call({:connect, connection}, _from, %State{connection: nil} = state) do
-    case Connection.connect(connection) do
-      {:ok, connection} -> {:reply, :ok, %{state | connection: connection, status: :connected}}
-      {:error, _reason} = error -> {:reply, error, state}
+  # :disconnected status means it's ok to connect
+  defp connect_precheck(%{status: :disconnected}, _opts), do: :ok
+
+  # Otherwise we should check for the :override flag
+  defp connect_precheck(%{connection: connection}, opts) do
+    case Enum.find(opts, &Kernel.==(&1, :override)) do
+      :override ->
+        Connection.disconnect(connection)
+
+        :ok
+
+      _ ->
+        :already_connected
     end
   end
 
-  def handle_call({:connection, _connection}, _from, state) do
-    {:reply, {:error, "Already connected"}, state}
+  @impl GenServer
+  def handle_call({:connect, connection, opts}, _from, state) do
+    with :ok <- connect_precheck(state, opts),
+         {:ok, connection} <- Connection.connect(connection) do
+      state = State.update(state, %{connection: connection, status: :connected})
+
+      {:reply, :ok, state}
+    else
+      {:error, _reason} = error ->
+        state = State.update(state, %{status: :disconnected})
+
+        {:reply, error, state}
+
+      :already_connected ->
+        {:reply, {:error, "Already connected"}, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call(:disconnect, _from, %{connection: connection} = state) do
+    Connection.disconnect(connection)
+
+    state = State.update(state, %{connection: nil, status: :disconnected})
+
+    {:reply, :ok, state}
   end
 
   @impl GenServer
