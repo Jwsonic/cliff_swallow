@@ -11,21 +11,22 @@ defmodule Printer.Connection.VirtualTest do
     connection = Virtual.new()
 
     connection =
-    case context[:no_connect] do
-      true -> connection
-      _ ->
-        {:ok, connection} = Connection.connect(connection)
+      case context[:no_connect] do
+        true ->
+          connection
 
-        on_exit(fn -> Connection.disconnect(connection) end)
+        _ ->
+          {:ok, connection} = Connection.connect(connection)
 
-        connection
-    end
+          on_exit(fn -> Connection.disconnect(connection) end)
+
+          connection
+      end
 
     {:ok, %{connection: connection}}
   end
 
   describe "Virtual.connect/1" do
-
     @tag :no_connect
     test "it spawns a virtual printer port", %{connection: connection} do
       assert connection.port == nil
@@ -71,7 +72,7 @@ defmodule Printer.Connection.VirtualTest do
 
   describe "Virtual.send/2" do
     test "it sends the message to the given port/pid", %{connection: %{port: port} = connection} do
-      :erlang.trace(port, true,  [:receive])
+      :erlang.trace(port, true, [:receive])
 
       me = self()
 
@@ -82,14 +83,19 @@ defmodule Printer.Connection.VirtualTest do
   end
 
   describe "Virtual.update/2" do
-    test "it forwards port messages as connection messages", %{connection: %{port: port} = connection} do
+    test "it forwards port messages as connection messages", %{
+      connection: %{port: port} = connection
+    } do
       {:ok, _connection} = Connection.update(connection, {port, {:data, "test"}})
 
       assert_receive {:connection_data, "test"}
     end
 
-    test "it handles port close events", %{connection: %{port: port, reference: reference} = connection}  do
-      assert {:error, ~s(Port closed: "It went boom")} == Connection.update(connection, {:DOWN, reference, :port, port, "It went boom"})
+    test "it handles port close events", %{
+      connection: %{port: port, reference: reference} = connection
+    } do
+      assert {:error, ~s(Port closed: "It went boom")} ==
+               Connection.update(connection, {:DOWN, reference, :port, port, "It went boom"})
     end
 
     test "it ignores other messages", %{connection: connection} do
