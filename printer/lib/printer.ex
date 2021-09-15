@@ -20,21 +20,36 @@ defmodule Printer do
     GenServer.call(PrinterServer, {:send, command})
   end
 
-  def move(args) do
-    args
+  @contract move(
+              axes ::
+                map_of(
+                  spec(fn k -> k in ["X", "Y", "Z"] end),
+                  int_or_float()
+                )
+            ) :: simple_result()
+  def move(axes) do
+    axes
     |> Gcode.g0()
     |> send()
   end
 
-  @contract heat_hotend(temp :: int_or_float()) :: simple_result()
-  def heat_hotend(temp) do
-    temp
-    |> Gcode.m109()
+  @contract heat_hotend(temperature :: int_or_float()) :: simple_result()
+  def heat_hotend(temperature) do
+    temperature
+    |> Gcode.m104()
     |> send()
   end
 
+  @contract heat_bed(temperature :: int_or_float()) :: simple_result()
+  def heat_bed(temperature) do
+    temperature
+    |> Gcode.m140()
+    |> send()
+  end
+
+  @contract extrude(amount :: int_or_float()) :: simple_result()
   def extrude(amount) do
-    [e: amount]
+    %{"E" => amount}
     |> Gcode.g1()
     |> send()
   end
@@ -47,15 +62,20 @@ defmodule Printer do
     |> send()
   end
 
-  @contract stop_temperature_report() :: simple_result()
-  def stop_temperature_report do
-    0
-    |> Gcode.m155()
+  @contract home(
+              axes ::
+                coll_of(
+                  spec(fn k -> k in ["X", "Y", "Z"] end),
+                  distinct: true,
+                  min_count: 1
+                )
+            ) :: simple_result()
+  def home(axes) do
+    axes
+    |> Gcode.g28()
     |> send()
   end
 
-  # home
-  # estop
   # print
   # heat bed
 end

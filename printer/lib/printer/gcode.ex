@@ -54,7 +54,8 @@ defmodule Printer.Gcode do
               axes ::
                 coll_of(
                   spec(fn k -> k in ["X", "Y", "Z"] end),
-                  distinct: true
+                  distinct: true,
+                  min_count: 1
                 )
             ) :: spec(is_binary())
   def g28(axes \\ []) do
@@ -67,7 +68,13 @@ defmodule Printer.Gcode do
   end
 
   @doc """
-  Returns the [wait for hotend](https://marlinfw.org/docs/gcode/M109.html) command.
+  Builds a [set hotend temperature](https://marlinfw.org/docs/gcode/M104.html) command.
+  """
+  @contract m104(temperature :: int_or_float()) :: spec(is_binary())
+  def m104(temperature), do: "M104 S#{temperature}\n"
+
+  @doc """
+  Builds a [wait for hotend](https://marlinfw.org/docs/gcode/M109.html) command.
   """
   @contract m109(temperature :: int_or_float()) :: spec(is_binary())
   def m109(temperature), do: "M109 S#{temperature}\n"
@@ -79,10 +86,10 @@ defmodule Printer.Gcode do
   def m112, do: "M112\n"
 
   @doc """
-  Returns the [wait for bed temperature](https://marlinfw.org/docs/gcode/M140.html) command.
+  Builds a [set bed temperature](https://marlinfw.org/docs/gcode/M140.html) command.
   """
-  @contract m140() :: spec(is_binary())
-  def m140, do: "M140\n"
+  @contract m140(temperature :: int_or_float()) :: spec(is_binary())
+  def m140(temperature), do: "M140 S#{temperature}\n"
 
   @doc """
   Builds a [temperature auto report](https://marlinfw.org/docs/gcode/M155.html) command.
