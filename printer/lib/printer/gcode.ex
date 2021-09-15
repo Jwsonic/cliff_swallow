@@ -44,7 +44,7 @@ defmodule Printer.Gcode do
       |> Enum.map(fn {axis, value} -> "#{axis}#{value}" end)
       |> Enum.join(" ")
 
-    "G0 #{params}\n"
+    "G1 #{params}\n"
   end
 
   @doc """
