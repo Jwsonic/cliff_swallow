@@ -1,10 +1,26 @@
 defmodule Printer.Connection.Failing do
+  @moduledoc """
+  A failing Printer Connection intended for use in testing.
+  """
   defstruct []
 
   defimpl Printer.Connection, for: Printer.Connection.Failing do
-    def connect(_connection), do: {:error, "Failed"}
-    def disconnect(_connection), do: :ok
-    def send(_connection, _message), do: {:error, "Failed"}
-    def update(_connection, _message), do: {:error, "Failed"}
+    alias Printer.Connection.Failing
+
+    def connect(%Failing{}) do
+      {:error, "Failed"}
+    end
+
+    def disconnect(%Failing{}) do
+      :ok
+    end
+
+    def send(%Failing{}, _message) do
+      {:error, "Failed"}
+    end
+
+    def update(%Failing{}, _message) do
+      {:error, "Failed"}
+    end
   end
 end
