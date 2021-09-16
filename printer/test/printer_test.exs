@@ -7,7 +7,7 @@ defmodule PrinterTest do
   use Norms
 
   alias Printer.Connection.{Failing, InMemory}
-  alias Printer.Gcode
+  alias Printer.{Gcode, State}
 
   setup context do
     {:ok, connection} = InMemory.start()
@@ -24,6 +24,15 @@ defmodule PrinterTest do
   describe "Printer.connect/2" do
     @tag :no_connect
     test "it connects when there is no connection", %{connection: connection} do
+      assert_printer_status(:disconnected)
+      assert Printer.connect(connection) == :ok
+      assert InMemory.last_command(connection) == :connect
+      assert_printer_status(:connected)
+    end
+
+    @tag :no_connect
+    test "it calls connect on the connection", %{connection: connection} do
+      assert InMemory.last_command(connection) == nil
       assert Printer.connect(connection) == :ok
       assert InMemory.last_command(connection) == :connect
     end
@@ -38,7 +47,7 @@ defmodule PrinterTest do
       assert InMemory.last_command(new_connection) == :connect
     end
 
-    test "if failing overrides lead to a disconnected state", %{connection: connection} do
+    test "failing overrides lead to a disconnected state", %{connection: connection} do
       assert InMemory.last_command(connection) == :connect
 
       Printer.connect(%Failing{}, [:override])
@@ -51,6 +60,25 @@ defmodule PrinterTest do
       {:ok, new_connection} = InMemory.start()
 
       assert Printer.connect(new_connection) == {:error, "Already connected"}
+    end
+  end
+
+  describe "Printer.disconnect" do
+    test "it calls disconnect on the connection", %{connection: connection} do
+      assert Printer.disconnect() == :ok
+      assert InMemory.last_command(connection) == :disconnect
+    end
+
+    test "it changes the printer state to disconnected" do
+      assert_printer_status(:connected)
+      assert Printer.disconnect() == :ok
+      assert_printer_status(:disconnected)
+    end
+  end
+
+  describe "Printer.state/0" do
+    test "it returns the current printer state" do
+      assert {:ok, %State{}} = Printer.state()
     end
   end
 
@@ -87,6 +115,13 @@ defmodule PrinterTest do
         assert Printer.start_temperature_report(interval) == :ok
         assert InMemory.last_command(connection) == {:send, Gcode.m155(interval)}
       end
+    end
+  end
+
+  describe "Printer.stop_temperature_report/0" do
+    property "It sends a M155 command with an interval of 0", %{connection: connection} do
+      assert Printer.stop_temperature_report() == :ok
+      assert InMemory.last_command(connection) == {:send, Gcode.m155(0)}
     end
   end
 
@@ -127,5 +162,11 @@ defmodule PrinterTest do
     test "you can't pass an empty list" do
       assert_raise Norm.MismatchError, fn -> Printer.move([]) end
     end
+  end
+
+  defp assert_printer_status(status) do
+    {:ok, %{status: actual_status}} = Printer.state()
+
+    assert status == actual_status
   end
 end

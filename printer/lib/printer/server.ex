@@ -55,11 +55,18 @@ defmodule Printer.Server do
 
   @impl GenServer
   def handle_call(:disconnect, _from, %{connection: connection} = state) do
-    Connection.disconnect(connection)
+    unless connection == nil do
+      Connection.disconnect(connection)
+    end
 
     state = State.update(state, %{connection: nil, status: :disconnected})
 
     {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_call(:state, _from, state) do
+    {:reply, {:ok, state}, state}
   end
 
   @impl GenServer

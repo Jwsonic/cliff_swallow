@@ -4,7 +4,7 @@ defmodule Printer do
   """
   use Norms
 
-  alias Printer.Gcode
+  alias Printer.{Gcode, State}
   alias Printer.Server, as: PrinterServer
 
   @contract connect(connection :: any_(), opts :: coll_of(:override)) :: simple_result()
@@ -12,12 +12,19 @@ defmodule Printer do
     GenServer.call(PrinterServer, {:connect, connection, opts})
   end
 
+  @contract disconnect() :: simple_result()
   def disconnect do
     GenServer.call(PrinterServer, :disconnect)
   end
 
-  defp send(command) do
+  @contract send(command :: spec(is_binary())) :: simple_result()
+  def send(command) do
     GenServer.call(PrinterServer, {:send, command})
+  end
+
+  @contract state() :: result(State.s())
+  def state do
+    GenServer.call(PrinterServer, :state)
   end
 
   @contract move(
@@ -62,6 +69,13 @@ defmodule Printer do
     |> send()
   end
 
+  @contract stop_temperature_report() :: simple_result()
+  def stop_temperature_report do
+    0
+    |> Gcode.m155()
+    |> send()
+  end
+
   @contract home(
               axes ::
                 coll_of(
@@ -77,5 +91,4 @@ defmodule Printer do
   end
 
   # print
-  # heat bed
 end
