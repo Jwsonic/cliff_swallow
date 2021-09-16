@@ -90,5 +90,21 @@ defmodule Printer do
     |> send()
   end
 
-  # print
+  @contract start_print(path :: spec(is_binary())) ::
+              result(
+                :ok,
+                one_of([
+                  spec(is_binary()),
+                  :enoent,
+                  :eacces,
+                  :eisdir,
+                  :enotdir,
+                  :enomem
+                ])
+              )
+  def start_print(path) do
+    with {:ok, _info} <- File.stat(path) do
+      GenServer.call(PrinterServer, {:print_start, path})
+    end
+  end
 end

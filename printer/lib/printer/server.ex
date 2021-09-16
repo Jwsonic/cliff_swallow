@@ -70,6 +70,11 @@ defmodule Printer.Server do
   end
 
   @impl GenServer
+  def handle_call({:print_start, _path}, _from, state) do
+    {:reply, :ok, state}
+  end
+
+  @impl GenServer
   def handle_call({:send, command}, _from, %State{connection: connection} = state) do
     reply = Connection.send(connection, command)
 
