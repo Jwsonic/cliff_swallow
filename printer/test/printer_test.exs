@@ -6,7 +6,7 @@ defmodule PrinterTest do
   use ExUnitProperties
   use Norms
 
-  alias Printer.Connection.{Failing, InMemory}
+  alias Printer.Connection.{InMemory, Overridable}
   alias Printer.{Gcode, State}
 
   setup context do
@@ -47,13 +47,15 @@ defmodule PrinterTest do
       assert InMemory.last_command(new_connection) == :connect
     end
 
-    test "failing overrides lead to a disconnected state", %{connection: connection} do
-      assert InMemory.last_command(connection) == :connect
+    property "failing overrides lead to a disconnected state", %{connection: connection} do
+      check all error <- binary() do
+        assert InMemory.last_command(connection) == :connect
 
-      Printer.connect(%Failing{}, [:override])
+        Printer.connect(Overridable.new(open: fn -> {:error, error} end), [:override])
 
-      assert InMemory.last_command(connection) == :disconnect
-      # TODO: check printer state
+        assert InMemory.last_command(connection) == :disconnect
+        assert :sys.get_state(Printer).status == :disconnected
+      end
     end
 
     test "it returns an error when already connected" do
