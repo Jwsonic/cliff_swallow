@@ -7,94 +7,70 @@ defmodule Printer.ConnectionTest do
   use Norms
 
   alias Printer.Connection
-  alias Printer.Connection.{InMemory, Overridable, Server}
+  alias Printer.Connection.{InMemory, Overridable}
 
-  setup context do
-    {:ok, server} = Server.start_link(printer_server: self())
+  setup do
     {:ok, connection} = InMemory.start()
-
-    unless context[:no_open] do
-      Connection.open(connection)
-    end
+    {:ok, server} = Connection.open(connection, printer_server: self())
 
     {:ok, %{connection: connection, server: server}}
   end
 
   describe "Connection.open/2" do
-    @tag :no_open
-    test "it calls open on the connection", %{connection: connection} do
-      assert Connection.open(connection) == :ok
-      assert_receive :connection_open
-      assert InMemory.last_message(connection) == :open
-    end
-
-    test "it sends a :connection_open message if the connect was successful", %{
-      connection: connection
+    test "it calls open on the connection and sends a :connect_open message", %{
+      connection: connection,
+      server: server
     } do
-      assert_receive :connection_open
+      assert_receive {:connection_open, ^server}
       assert InMemory.last_message(connection) == :open
     end
 
-    test "it returns an error if the connection is already open", %{connection: connection} do
-      assert Connection.open(connection) == {:error, "Already connected"}
-    end
-
-    @tag :no_open
     property "it sends a :connection_open_failed message if open fails" do
       check all message <- binary() do
         connection = Overridable.new(open: fn _ -> {:error, message} end)
 
-        assert Connection.open(connection) == :ok
+        assert {:ok, pid} = Connection.open(connection, printer_server: self())
 
-        assert_receive {:connection_open_failed, ^message}
+        assert_receive {:connection_open_failed, ^pid, ^message}
       end
     end
 
-    test "it allows for an override", %{connection: old_connection} do
-      {:ok, new_connection} = InMemory.start()
+    test "it allows for many open connections at a time" do
+      {:ok, connection1} = InMemory.start()
+      {:ok, connection2} = InMemory.start()
 
-      assert Connection.open(new_connection, true) == :ok
+      assert {:ok, pid1} = Connection.open(connection1, printer_server: self())
+      assert_receive {:connection_open, ^pid1}
 
-      assert_receive :connection_open
+      assert {:ok, pid2} = Connection.open(connection2, printer_server: self())
+      assert_receive {:connection_open, ^pid2}
 
-      assert InMemory.last_message(new_connection) == :open
-      assert InMemory.last_message(old_connection) == :close
+      assert Process.alive?(pid1)
+      assert Process.alive?(pid2)
+      assert pid1 != pid2
     end
   end
 
   describe "Connection.close/1" do
-    test "it calls close/1 on the connection", %{connection: connection} do
-      assert Connection.close() == :ok
+    test "it calls close/1 on the connection", %{connection: connection, server: server} do
+      assert Connection.close(server) == :ok
       assert InMemory.last_message(connection) == :close
     end
 
-    @tag :no_open
     property "it returns the result of close" do
       check all message <- binary() do
         connection = Overridable.new(close: fn _ -> {:error, message} end)
-        assert Connection.open(connection) == :ok
-        assert Connection.close() == {:error, message}
+        assert {:ok, pid} = Connection.open(connection, printer_server: self())
+        assert Connection.close(pid) == {:error, message}
       end
-    end
-
-    @tag :no_open
-    test "it returns :ok when not connected" do
-      assert Connection.close() == :ok
     end
   end
 
   describe "Connection.send/1" do
-    property "it calls send/2 on the connection", %{connection: connection} do
+    property "it calls send/2 on the connection", %{connection: connection, server: server} do
       check all message <- binary() do
-        assert Connection.send(message) == :ok
+        assert Connection.send(server, message) == :ok
         assert InMemory.last_message(connection) == {:send, message}
-      end
-    end
-
-    @tag :no_open
-    property "it returns an error if not connected" do
-      check all message <- binary() do
-        assert Connection.send(message) == {:error, "Not connected"}
       end
     end
 
@@ -103,9 +79,9 @@ defmodule Printer.ConnectionTest do
                 message <- binary() do
         connection = Overridable.new(send: fn _, _ -> {:error, error} end)
 
-        assert Connection.open(connection, true) == :ok
+        assert {:ok, server} = Connection.open(connection, printer_server: self())
 
-        assert Connection.send(message) == {:error, error}
+        assert Connection.send(server, message) == {:error, error}
       end
     end
   end

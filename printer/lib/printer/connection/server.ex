@@ -7,8 +7,8 @@ defmodule Printer.Connection.Server do
   alias Printer.Connection.Server.Logic
   alias Printer.Connection.Server.State
 
-  def start_link(args) do
-    GenServer.start_link(__MODULE__, args, name: __MODULE__)
+  def start_link(args \\ []) do
+    GenServer.start_link(__MODULE__, args)
   end
 
   @impl GenServer

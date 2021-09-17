@@ -8,7 +8,8 @@ defmodule Printer.Connection.Server.Logic do
 
   def init(args) do
     args
-    |> Keyword.get(:printer_server, Printer.Server)
+    |> Keyword.get(:printer_server)
+    |> Kernel.||(Printer.Server)
     |> State.new()
   end
 
@@ -46,12 +47,12 @@ defmodule Printer.Connection.Server.Logic do
   def open_connection(state, connection) do
     case ConnectionProtocol.open(connection) do
       {:ok, connection} ->
-        send_to_printer(state, :connection_open)
+        send_to_printer(state, {:connection_open, self()})
 
         State.update(state, %{connection: connection})
 
       {:error, reason} ->
-        send_to_printer(state, {:connection_open_failed, reason})
+        send_to_printer(state, {:connection_open_failed, self(), reason})
 
         State.update(state, %{connection: nil})
     end

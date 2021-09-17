@@ -9,7 +9,8 @@ defmodule Printer.Application do
   def start(_type, _args) do
     children = [
       Printer.PubSub,
-      Printer.Server
+      Printer.Server,
+      Printer.Connection.DynamicSupervisor
     ]
 
     opts = [strategy: :one_for_one, name: Printer.Supervisor]
