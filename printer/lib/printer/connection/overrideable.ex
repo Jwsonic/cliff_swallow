@@ -22,7 +22,7 @@ defmodule Printer.Connection.Overridable do
     end
 
     def close(connection) do
-      apply(connection.close, [])
+      apply(connection.close, [connection])
     end
 
     def send(connection, message) do

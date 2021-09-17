@@ -62,7 +62,7 @@ defmodule Printer.ConnectionTest do
     end
   end
 
-  describe "Connection.close/0" do
+  describe "Connection.close/1" do
     test "it calls close/1 on the connection", %{connection: connection} do
       assert Connection.close() == :ok
       assert InMemory.last_message(connection) == :close
@@ -71,7 +71,7 @@ defmodule Printer.ConnectionTest do
     @tag :no_open
     property "it returns the result of close" do
       check all message <- binary() do
-        connection = Overridable.new(close: fn -> {:error, message} end)
+        connection = Overridable.new(close: fn _ -> {:error, message} end)
         assert Connection.open(connection) == :ok
         assert Connection.close() == {:error, message}
       end
