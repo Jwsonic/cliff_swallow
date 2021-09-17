@@ -7,33 +7,14 @@ defmodule Printer.Connection.Server.Logic do
   end
 
   def init(args) do
-    args
-    |> Keyword.get(:printer_server)
-    |> Kernel.||(Printer.Server)
-    |> State.new()
+    State.new(args)
   end
 
-  # no connection? good to go
-  def connect_precheck(%State{connection: nil}, _override?), do: :ok
-
-  # existing connections need to be closed
-  def connect_precheck(%State{connection: connection}, true) do
-    ConnectionProtocol.close(connection)
-  end
-
-  # otherwise we're already happily connected
-  def connect_precheck(_state, _override?), do: {:error, "Already connected"}
-
-  def close(%State{connection: connection} = state) do
-    reply =
-      case connection do
-        nil -> :ok
-        _ -> ConnectionProtocol.close(connection)
-      end
-
-    state = State.update(state, %{connection: nil})
-
-    {reply, state}
+  def close(%State{connection: connection}) do
+    case connection do
+      nil -> :ok
+      _ -> ConnectionProtocol.close(connection)
+    end
   end
 
   def send(%State{connection: nil}, _messsage) do
@@ -44,17 +25,17 @@ defmodule Printer.Connection.Server.Logic do
     ConnectionProtocol.send(connection, message)
   end
 
-  def open_connection(state, connection) do
+  def open_connection(%State{connection: connection} = state) do
     case ConnectionProtocol.open(connection) do
       {:ok, connection} ->
         send_to_printer(state, {:connection_open, self()})
 
-        State.update(state, %{connection: connection})
+        {:ok, %{state | connection: connection}}
 
-      {:error, reason} ->
+      {:error, reason} = error ->
         send_to_printer(state, {:connection_open_failed, self(), reason})
 
-        State.update(state, %{connection: nil})
+        error
     end
   end
 
@@ -66,7 +47,7 @@ defmodule Printer.Connection.Server.Logic do
       :closed ->
         send_to_printer(state, :connection_closed)
 
-        State.update(state, %{connection: nil})
+        %{state | connection: nil}
 
       {:ok, response} ->
         send_to_printer(state, {:connection_response, response})

@@ -25,14 +25,12 @@ defmodule Printer.ConnectionTest do
       assert InMemory.last_message(connection) == :open
     end
 
-    property "it sends a :connection_open_failed message if open fails" do
-      check all message <- binary() do
-        connection = Overridable.new(open: fn _ -> {:error, message} end)
+    test "it sends a :connection_open_failed message if open fails" do
+      connection = Overridable.new(open: fn _ -> {:error, "Failed"} end)
 
-        assert {:ok, pid} = Connection.open(connection, printer_server: self())
+      assert {:ok, pid} = Connection.open(connection, printer_server: self())
 
-        assert_receive {:connection_open_failed, ^pid, ^message}
-      end
+      assert_receive {:connection_open_failed, ^pid, "Failed"}
     end
 
     test "it allows for many open connections at a time" do
@@ -58,11 +56,9 @@ defmodule Printer.ConnectionTest do
     end
 
     property "it returns the result of close" do
-      check all message <- binary() do
-        connection = Overridable.new(close: fn _ -> {:error, message} end)
-        assert {:ok, pid} = Connection.open(connection, printer_server: self())
-        assert Connection.close(pid) == {:error, message}
-      end
+      connection = Overridable.new(close: fn _ -> {:error, "Failed"} end)
+      assert {:ok, pid} = Connection.open(connection, printer_server: self())
+      assert Connection.close(pid) == {:error, "Failed"}
     end
   end
 

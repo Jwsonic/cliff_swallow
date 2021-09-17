@@ -5,7 +5,6 @@ defmodule Printer.Connection.Server do
   use GenServer
 
   alias Printer.Connection.Server.Logic
-  alias Printer.Connection.Server.State
 
   def start_link(args \\ []) do
     GenServer.start_link(__MODULE__, args)
@@ -15,25 +14,22 @@ defmodule Printer.Connection.Server do
   def init(args) do
     state = Logic.init(args)
 
-    {:ok, state}
+    {:ok, state, {:continue, :open_connection}}
   end
 
   @impl GenServer
-  def handle_call({:open, connection, override?}, _from, state) do
-    case Logic.connect_precheck(state, override?) do
-      :ok ->
-        {:reply, :ok, state, {:continue, {:open_connection, connection}}}
-
-      {:error, _reason} = error ->
-        {:reply, error, state}
+  def handle_continue(:open_connection, state) do
+    case Logic.open_connection(state) do
+      {:ok, state} -> {:noreply, state}
+      {:error, _error} -> {:stop, :normal, state}
     end
   end
 
   @impl GenServer
   def handle_call(:close, _from, state) do
-    {reply, state} = Logic.close(state)
+    reply = Logic.close(state)
 
-    {:reply, reply, state}
+    {:stop, :normal, reply, state}
   end
 
   @impl GenServer
@@ -41,18 +37,6 @@ defmodule Printer.Connection.Server do
     reply = Logic.send(state, message)
 
     {:reply, reply, state}
-  end
-
-  @impl GenServer
-  def handle_continue({:open_connection, connection}, state) do
-    state = Logic.open_connection(state, connection)
-
-    {:noreply, state}
-  end
-
-  @impl GenServer
-  def handle_info(_message, %State{connection: nil} = state) do
-    {:noreply, state}
   end
 
   @impl GenServer
