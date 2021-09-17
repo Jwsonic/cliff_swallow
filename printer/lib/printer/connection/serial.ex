@@ -32,57 +32,57 @@ defmodule Printer.Connection.Serial do
     }
   end
 
-  defimpl Printer.Connection, for: Printer.Connection.Serial do
-    use Norms
+  # defimpl Printer.Connection, for: Printer.Connection.Serial do
+  #   use Norms
 
-    alias Circuits.UART
-    alias Printer.Connection.Serial
+  #   alias Circuits.UART
+  #   alias Printer.Connection.Serial
 
-    @contract connect(connection :: Serial.s()) :: result(Serial.s(), any_())
-    def connect(%Serial{pid: pid} = connection) when is_pid(pid) do
-      {:ok, connection}
-    end
+  #   @contract connect(connection :: Serial.s()) :: result(Serial.s(), any_())
+  #   def connect(%Serial{pid: pid} = connection) when is_pid(pid) do
+  #     {:ok, connection}
+  #   end
 
-    def connect(%Serial{name: name, speed: speed} = connection) do
-      with {:ok, pid} <- UART.start_link(),
-           :ok <-
-             UART.open(pid, name,
-               speed: speed,
-               active: true,
-               framing: {UART.Framing.Line, separator: "\n"}
-             ) do
-        {:ok, %{connection | pid: pid}}
-      end
-    end
+  #   def connect(%Serial{name: name, speed: speed} = connection) do
+  #     with {:ok, pid} <- UART.start_link(),
+  #          :ok <-
+  #            UART.open(pid, name,
+  #              speed: speed,
+  #              active: true,
+  #              framing: {UART.Framing.Line, separator: "\n"}
+  #            ) do
+  #       {:ok, %{connection | pid: pid}}
+  #     end
+  #   end
 
-    @contract disconnect(connection :: Serial.s()) :: :ok
-    def disconnect(%Serial{pid: nil}), do: :ok
+  #   @contract disconnect(connection :: Serial.s()) :: :ok
+  #   def disconnect(%Serial{pid: nil}), do: :ok
 
-    def disconnect(%Serial{pid: pid}) when is_pid(pid) do
-      if Process.alive?(pid) do
-        UART.close(pid)
-        UART.stop(pid)
-      end
+  #   def disconnect(%Serial{pid: pid}) when is_pid(pid) do
+  #     if Process.alive?(pid) do
+  #       UART.close(pid)
+  #       UART.stop(pid)
+  #     end
 
-      :ok
-    end
+  #     :ok
+  #   end
 
-    @contract send(connection :: Serial.s(), command :: spec(is_binary())) :: simple_result()
-    def send(%Serial{pid: nil}, _command), do: :ok
+  #   @contract send(connection :: Serial.s(), command :: spec(is_binary())) :: simple_result()
+  #   def send(%Serial{pid: nil}, _command), do: :ok
 
-    def send(%Serial{pid: pid}, command) do
-      UART.write(pid, command)
-    end
+  #   def send(%Serial{pid: pid}, command) do
+  #     UART.write(pid, command)
+  #   end
 
-    @contract update(connection :: Serial.s(), message :: any_()) :: result(Serial.s(), any_())
-    def update(%Serial{name: name} = connection, {:circuits_uart, name, data}) do
-      Process.send(self(), {:connection_data, data}, [])
+  #   @contract update(connection :: Serial.s(), message :: any_()) :: result(Serial.s(), any_())
+  #   def update(%Serial{name: name} = connection, {:circuits_uart, name, data}) do
+  #     Process.send(self(), {:connection_data, data}, [])
 
-      {:ok, connection}
-    end
+  #     {:ok, connection}
+  #   end
 
-    def update(connection, _message) do
-      {:ok, connection}
-    end
-  end
+  #   def update(connection, _message) do
+  #     {:ok, connection}
+  #   end
+  # end
 end

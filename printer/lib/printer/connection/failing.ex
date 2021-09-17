@@ -4,22 +4,20 @@ defmodule Printer.Connection.Failing do
   """
   defstruct []
 
-  defimpl Printer.Connection, for: Printer.Connection.Failing do
-    alias Printer.Connection.Failing
-
-    def connect(%Failing{}) do
+  defimpl Printer.Connection.Protocol, for: Printer.Connection.Failing do
+    def open(_connection) do
       {:error, "Failed"}
     end
 
-    def disconnect(%Failing{}) do
-      :ok
-    end
-
-    def send(%Failing{}, _message) do
+    def close(_connection) do
       {:error, "Failed"}
     end
 
-    def update(%Failing{}, _message) do
+    def send(_connection, _message) do
+      {:error, "Failed"}
+    end
+
+    def handle_response(_connection, _message) do
       {:error, "Failed"}
     end
   end

@@ -1,23 +1,24 @@
-defprotocol Printer.Connection do
-  @type t() :: any()
+defmodule Printer.Connection do
+  @moduledoc """
+  Internal API for managing a Connection
+  """
 
-  @spec connect(connection :: t()) :: {:ok, connection :: t()} | {:error, String.t()}
-  def connect(connection)
+  use Norms
 
-  @spec disconnect(connection :: t()) :: :ok
-  def disconnect(connection)
+  alias Printer.Connection.Server
 
-  @spec send(connection :: t(), command :: String.t()) :: :ok | {:error, String.t()}
-  def send(connection, command)
+  @contract open(connection :: any_(), override? :: spec(is_boolean())) :: simple_result()
+  def open(connection, override? \\ false) do
+    GenServer.call(Server, {:open, connection, override?})
+  end
 
-  @spec update(connection :: t(), message :: any()) ::
-          {:ok, connection :: t()} | {:error, String.t()}
-  def update(connection, message)
-end
+  @contract close() :: simple_result()
+  def close do
+    GenServer.call(Server, :close)
+  end
 
-defimpl Printer.Connection, for: Any do
-  def connect(_connection), do: {:error, "Not a connection."}
-  def disconnect(_connection), do: :ok
-  def send(_connection, _message), do: {:error, "Not a connection."}
-  def update(_connection, _message), do: {:error, "Not a connection."}
+  @contract send(message :: any_()) :: simple_result()
+  def send(message) do
+    GenServer.call(Server, {:send, message})
+  end
 end
