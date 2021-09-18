@@ -13,7 +13,12 @@ defmodule Printer.Connection.DynamicSupervisor do
   end
 
   def start_connection_server(args \\ []) do
-    spec = {ConnectionServer, args}
+    spec = %{
+      id: ConnectionServer,
+      start: {ConnectionServer, :start_link, [args]},
+      restart: :transient
+    }
+
     DynamicSupervisor.start_child(__MODULE__, spec)
   end
 end

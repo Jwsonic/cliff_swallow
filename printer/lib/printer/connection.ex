@@ -13,11 +13,11 @@ defmodule Printer.Connection do
     |> ConnectionSupervisor.start_connection_server()
   end
 
-  def close(connection) do
-    GenServer.call(connection, :close)
+  def close(server) do
+    GenServer.call(server, :close)
   end
 
-  def send(connection, message) do
-    GenServer.call(connection, {:send, message})
+  def send(server, message) do
+    GenServer.call(server, {:send, message})
   end
 end
