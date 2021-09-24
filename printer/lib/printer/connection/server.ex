@@ -34,9 +34,11 @@ defmodule Printer.Connection.Server do
   def handle_continue(:open_connection, %State{connection: connection} = state) do
     case ConnectionProtocol.open(connection) do
       {:ok, connection} ->
-        send_to_printer(state, :connection_open)
+        state = %{state | connection: connection}
 
-        {:noreply, %{state | connection: connection}}
+        send_to_printer(state, :connection_open, connection)
+
+        {:noreply, state}
 
       {:error, reason} ->
         send_to_printer(state, :connection_open_failed, reason)
@@ -73,10 +75,12 @@ defmodule Printer.Connection.Server do
       end
 
     case response do
-      {:ok, state} ->
-        {:noreply, state}
+      {:ok, connection} ->
+        {:noreply, %{state | connection: connection}}
 
-      {:ok, state, response} ->
+      {:ok, connection, response} ->
+        state = %{state | connection: connection}
+
         send_to_printer(state, :connection_response, response)
 
         {:noreply, state}
@@ -86,20 +90,17 @@ defmodule Printer.Connection.Server do
 
         {:stop, :normal, reason, state}
 
-      {:error, error, state} ->
+      {:error, error, connection} ->
+        state = %{state | connection: connection}
+
         send_to_printer(state, :connection_error, error)
 
         {:noreply, state}
     end
   end
 
-  defp send_to_printer(%State{printer_server: printer_server}, type, data \\ nil) do
-    message =
-      case data do
-        nil -> {type, self()}
-        data -> {type, self(), data}
-      end
-
-    Process.send(printer_server, message, [])
+  # Sends a self() tagged message to the printer server
+  defp send_to_printer(%State{printer_server: printer_server}, type, data) do
+    Process.send(printer_server, {type, self(), data}, [])
   end
 end

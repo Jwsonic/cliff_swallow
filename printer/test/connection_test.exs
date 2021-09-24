@@ -9,17 +9,19 @@ defmodule Printer.ConnectionTest do
   alias Printer.Connection.{Echo, Overridable}
 
   setup do
-    {:ok, server} = Connection.open(Echo.new())
+    connection = Echo.new()
+    {:ok, server} = Connection.open(connection)
 
-    {:ok, %{server: server}}
+    {:ok, %{connection: connection, server: server}}
   end
 
   describe "Connection.open/2" do
     test "it calls open/1 on the connection and sends a :connect_open message", %{
+      connection: connection,
       server: server
     } do
       assert_receive {Echo, :open}
-      assert_receive {:connection_open, ^server}
+      assert_receive {:connection_open, ^server, ^connection}
     end
 
     test "it sends a :connection_open_failed message if open/1 fails" do
@@ -30,11 +32,16 @@ defmodule Printer.ConnectionTest do
       assert_receive {:connection_open_failed, ^server, "Failed"}
     end
 
-    test "it allows for many open connections at a time", %{server: server1} do
-      assert_receive {:connection_open, ^server1}
+    test "it allows for many open connections at a time", %{
+      connection: connection,
+      server: server1
+    } do
+      assert_receive {:connection_open, ^server1, ^connection}
 
-      assert {:ok, server2} = Connection.open(Echo.new())
-      assert_receive {:connection_open, ^server2}
+      connection2 = Echo.new()
+
+      assert {:ok, server2} = Connection.open(connection2)
+      assert_receive {:connection_open, ^server2, ^connection2}
 
       assert Process.alive?(server1)
       assert Process.alive?(server2)
@@ -43,8 +50,8 @@ defmodule Printer.ConnectionTest do
   end
 
   describe "Connection.close/1" do
-    test "it calls close/1 on the connection", %{server: server} do
-      assert_receive {:connection_open, ^server}, 1_000
+    test "it calls close/1 on the connection", %{connection: connection, server: server} do
+      assert_receive {:connection_open, ^server, ^connection}, 1_000
       assert Connection.close(server) == :ok
       assert_receive {Echo, :close}, 1_000
     end
