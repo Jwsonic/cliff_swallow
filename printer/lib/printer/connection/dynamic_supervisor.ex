@@ -33,14 +33,18 @@ defmodule Printer.Connection.DynamicSupervisor do
   Supported args:\n#{NimbleOptions.docs(@start_connection_server_schema)}
   """
   def start_connection_server(args \\ []) do
-    with {:ok, args} <- NimbleOptions.validate(args, @start_connection_server_schema) do
-      spec = %{
-        id: ConnectionServer,
-        start: {ConnectionServer, :start_link, [args]},
-        restart: :transient
-      }
+    case NimbleOptions.validate(args, @start_connection_server_schema) do
+      {:ok, args} ->
+        spec = %{
+          id: ConnectionServer,
+          start: {ConnectionServer, :start_link, [args]},
+          restart: :transient
+        }
 
-      DynamicSupervisor.start_child(__MODULE__, spec)
+        DynamicSupervisor.start_child(__MODULE__, spec)
+
+      {:error, %NimbleOptions.ValidationError{} = error} ->
+        {:error, Exception.message(error)}
     end
   end
 end

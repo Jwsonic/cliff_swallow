@@ -64,10 +64,10 @@ defmodule Printer.Connection.Server do
     # The message may not be for the protocol, so catch function clause errors here
     response =
       try do
-        ConnectionProtocol.handle_response(connection, message)
+        ConnectionProtocol.handle_message(connection, message)
       rescue
         FunctionClauseError ->
-          Logger.info("handle_response/2 unable to handle message: #{inspect(message)}")
+          Logger.info("handle_message/2 unable to handle message: #{inspect(message)}")
 
           :ok
       end

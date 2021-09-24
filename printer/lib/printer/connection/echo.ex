@@ -29,10 +29,10 @@ defmodule Printer.Connection.Echo do
       send_echo(connection, {:send, message})
     end
 
-    def handle_response(%Echo{} = connection, response) do
-      send_echo(connection, {:handle_response, response})
+    def handle_message(%Echo{} = connection, message) do
+      send_echo(connection, {:handle_message, message})
 
-      response
+      {:ok, message}
     end
 
     defp send_echo(%Echo{listener: listener}, message) do

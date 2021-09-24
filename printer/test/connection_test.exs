@@ -9,31 +9,31 @@ defmodule Printer.ConnectionTest do
   alias Printer.Connection.{Echo, Overridable}
 
   setup do
-    {:ok, server} = Connection.open(Echo.new(), printer_server: self())
+    {:ok, server} = Connection.open(Echo.new())
 
     {:ok, %{server: server}}
   end
 
   describe "Connection.open/2" do
-    test "it calls open on the connection and sends a :connect_open message", %{
+    test "it calls open/1 on the connection and sends a :connect_open message", %{
       server: server
     } do
       assert_receive {Echo, :open}
       assert_receive {:connection_open, ^server}
     end
 
-    test "it sends a :connection_open_failed message if open fails" do
-      connection = Overridable.new(open: fn _ -> {:error, "Failed"} end)
+    test "it sends a :connection_open_failed message if open/1 fails" do
+      {:ok, connection} = Overridable.new(open: fn _ -> {:error, "Failed"} end)
 
-      assert {:ok, pid} = Connection.open(connection, printer_server: self())
+      assert {:ok, server} = Connection.open(connection)
 
-      assert_receive {:connection_open_failed, ^pid, "Failed"}
+      assert_receive {:connection_open_failed, ^server, "Failed"}
     end
 
     test "it allows for many open connections at a time", %{server: server1} do
       assert_receive {:connection_open, ^server1}
 
-      assert {:ok, server2} = Connection.open(Echo.new(), printer_server: self())
+      assert {:ok, server2} = Connection.open(Echo.new())
       assert_receive {:connection_open, ^server2}
 
       assert Process.alive?(server1)
@@ -49,11 +49,13 @@ defmodule Printer.ConnectionTest do
       assert_receive {Echo, :close}, 1_000
     end
 
-    property "it returns the result of close" do
-      check all error <- binary() do
-        connection = Overridable.new(close: fn _ -> {:error, error} end)
+    property "it returns the error result of close/1", %{server: server} do
+      assert Connection.close(server) == :ok
 
-        assert {:ok, server} = Connection.open(connection, printer_server: self())
+      check all error <- binary() do
+        {:ok, connection} = Overridable.new(close: fn _ -> {:error, error} end)
+
+        assert {:ok, server} = Connection.open(connection)
         assert Connection.close(server) == {:error, error}
       end
     end
@@ -70,9 +72,9 @@ defmodule Printer.ConnectionTest do
     property "it resturns the result of send/2" do
       check all error <- binary(),
                 message <- binary() do
-        connection = Overridable.new(send: fn _, _ -> {:error, error} end)
+        {:ok, connection} = Overridable.new(send: fn _, _ -> {:error, error} end)
 
-        assert {:ok, server} = Connection.open(connection, printer_server: self())
+        assert {:ok, server} = Connection.open(connection)
 
         assert Connection.send(server, message) == {:error, error}
       end
