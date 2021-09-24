@@ -6,7 +6,15 @@ defmodule Printer.Server do
 
   require Logger
 
-  alias Printer.{Connection, State}
+  defmodule State do
+    @moduledoc """
+    State struct for `Printer.Server`.
+    """
+    defstruct [:connection, :status]
+  end
+
+  alias Printer.Connection
+  alias Printer.Server.State
 
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
@@ -14,19 +22,22 @@ defmodule Printer.Server do
 
   @impl GenServer
   def init(_args) do
-    state = State.new()
+    state = %State{
+      connection: nil,
+      status: :disconnected
+    }
 
     {:ok, state}
   end
 
   # :disconnected status means it's ok to connect
-  defp connect_precheck(%{status: :disconnected}, _opts), do: :ok
+  defp connect_precheck(%State{status: :disconnected}, _opts), do: :ok
 
   # Otherwise we should check for the :override flag
-  defp connect_precheck(%{connection: connection}, opts) do
-    case Enum.find(opts, &Kernel.==(&1, :override)) do
-      :override ->
-        Connection.disconnect(connection)
+  defp connect_precheck(%State{connection: connection}, opts) do
+    case Keyword.get(opts, :override, false) do
+      true ->
+        Connection.close(connection)
 
         :ok
 
@@ -38,13 +49,13 @@ defmodule Printer.Server do
   @impl GenServer
   def handle_call({:connect, connection, opts}, _from, state) do
     with :ok <- connect_precheck(state, opts),
-         {:ok, connection} <- Connection.connect(connection) do
-      state = State.update(state, %{connection: connection, status: :connected})
+         {:ok, connection} <- Connection.open(connection) do
+      state = %{state | connection: connection, status: :connected}
 
       {:reply, :ok, state}
     else
       {:error, _reason} = error ->
-        state = State.update(state, %{status: :disconnected})
+        state = %{state | connection: nil, status: :disconnected}
 
         {:reply, error, state}
 
@@ -54,12 +65,12 @@ defmodule Printer.Server do
   end
 
   @impl GenServer
-  def handle_call(:disconnect, _from, %{connection: connection} = state) do
+  def handle_call(:disconnect, _from, %State{connection: connection} = state) do
     unless connection == nil do
-      Connection.disconnect(connection)
+      Connection.close(connection)
     end
 
-    state = State.update(state, %{connection: nil, status: :disconnected})
+    state = %{state | connection: nil, status: :disconnected}
 
     {:reply, :ok, state}
   end
@@ -86,12 +97,5 @@ defmodule Printer.Server do
     Logger.info(data, label: :printer)
 
     {:noreply, state}
-  end
-
-  def handle_info(message, %State{connection: connection} = state) do
-    case Connection.update(connection, message) do
-      {:ok, connection} -> {:noreply, %{state | connection: connection}}
-      {:error, reason} -> {:stop, reason, connection}
-    end
   end
 end

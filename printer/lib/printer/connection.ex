@@ -5,17 +5,20 @@ defmodule Printer.Connection do
 
   alias Printer.Connection.DynamicSupervisor, as: ConnectionSupervisor
 
-  def open(connection, opts \\ []) do
-    opts
-    |> Keyword.merge(connection: connection)
-    |> ConnectionSupervisor.start_connection_server()
+  def open(connection, printer_server \\ nil) do
+    args = [
+      connection: connection,
+      printer_server: printer_server || self()
+    ]
+
+    ConnectionSupervisor.start_connection_server(args)
   end
 
-  def close(server) do
+  def close(server) when is_pid(server) do
     GenServer.call(server, :close)
   end
 
-  def send(server, message) do
+  def send(server, message) when is_pid(server) do
     GenServer.call(server, {:send, message})
   end
 end

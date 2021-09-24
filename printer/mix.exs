@@ -25,6 +25,7 @@ defmodule Printer.MixProject do
     [
       {:circuits_uart, "~> 1.3"},
       {:phoenix_pubsub, "~> 2.0"},
+      {:nimble_options, "~> 0.3.0"},
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 0.5.0", only: [:dev, :test]},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
