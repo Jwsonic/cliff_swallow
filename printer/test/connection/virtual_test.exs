@@ -3,103 +3,102 @@ defmodule Printer.Connection.VirtualTest do
   Tests for the virtual printer connection.
   """
   use ExUnit.Case, async: true
+  use ExUnitProperties
 
-  alias Printer.Connection
+  alias Printer.Connection.Protocol, as: ConnectionProtocol
   alias Printer.Connection.Virtual
 
-  setup context do
-    connection = Virtual.new()
+  setup do
+    data = %{connection: Virtual.new()}
 
-    connection =
-      case context[:no_connect] do
-        true ->
-          connection
-
-        _ ->
-          {:ok, connection} = Connection.connect(connection)
-
-          on_exit(fn -> Connection.disconnect(connection) end)
-
-          connection
-      end
-
-    {:ok, %{connection: connection}}
+    {:ok, data}
   end
 
-  describe "Virtual.connect/1" do
-    @tag :no_connect
+  describe "Virtual.open/1" do
     test "it spawns a virtual printer port", %{connection: connection} do
       assert connection.port == nil
       assert connection.reference == nil
 
-      {:ok, connection} = Connection.connect(connection)
+      {:ok,
+       %Virtual{
+         port: port,
+         reference: reference
+       }} = ConnectionProtocol.open(connection)
 
-      assert is_port(connection.port)
-      assert is_reference(connection.reference)
+      assert is_port(port)
+      assert is_reference(reference)
 
-      Connection.disconnect(connection)
+      {:connected, pid} = Port.info(port, :connected)
+
+      assert is_pid(pid)
+      assert Process.alive?(pid)
     end
 
     test "it does nothing if a port is already open", %{connection: connection} do
-      assert is_port(connection.port)
-      assert is_reference(connection.reference)
+      {:ok, connection} = ConnectionProtocol.open(connection)
 
-      {:ok, connection2} = Connection.connect(connection)
-
-      assert connection.port == connection2.port
-      assert connection.reference == connection2.reference
+      assert ConnectionProtocol.open(connection) == {:error, "Connection is already open"}
     end
   end
 
-  describe "Virtual.disconnect/1" do
+  describe "Virtual.close/1" do
     test "it closes a port if there's one open", %{connection: connection} do
-      assert is_port(connection.port)
-      assert is_reference(connection.reference)
+      {:ok, connection} = ConnectionProtocol.open(connection)
 
-      Connection.disconnect(connection)
+      assert ConnectionProtocol.close(connection) == :ok
 
-      Port.info(connection.port)
+      assert Port.info(connection.port, :pid) == nil
     end
 
-    @tag :no_connect
     test "it does nothing if there's no port open", %{connection: connection} do
       assert connection.port == nil
       assert connection.reference == nil
 
-      assert Connection.disconnect(connection) == :ok
+      assert ConnectionProtocol.close(connection) == :ok
     end
   end
 
   describe "Virtual.send/2" do
-    test "it sends the message to the given port/pid", %{connection: %{port: port} = connection} do
+    test "it sends the message to the given port/pid", %{connection: connection} do
+      {:ok, %{port: port} = connection} = ConnectionProtocol.open(connection)
+
       :erlang.trace(port, true, [:receive])
 
       me = self()
 
-      Connection.send(connection, "G10\n")
+      ConnectionProtocol.send(connection, "G10\n")
 
       assert_receive {:trace, ^port, :receive, {^me, {:command, "G10\n"}}}, 1_000
     end
   end
 
-  describe "Virtual.update/2" do
-    test "it forwards port messages as connection messages", %{
-      connection: %{port: port} = connection
+  describe "Virtual.handle_message/2" do
+    property "it returns port data", %{
+      connection: connection
     } do
-      {:ok, _connection} = Connection.update(connection, {port, {:data, "test"}})
+      {:ok, %{port: port} = connection} = ConnectionProtocol.open(connection)
 
-      assert_receive {:connection_data, "test"}
+      check all data <- binary() do
+        assert ConnectionProtocol.handle_message(connection, {port, {:data, data}}) ==
+                 {:ok, connection, data}
+      end
     end
 
     test "it handles port close events", %{
-      connection: %{port: port, reference: reference} = connection
+      connection: connection
     } do
-      assert {:error, ~s(Port closed: "It went boom")} ==
-               Connection.update(connection, {:DOWN, reference, :port, port, "It went boom"})
+      {:ok, %{port: port, reference: reference} = connection} =
+        ConnectionProtocol.open(connection)
+
+      assert {:closed, ~s("It went boom")} ==
+               ConnectionProtocol.handle_message(
+                 connection,
+                 {:DOWN, reference, :port, port, "It went boom"}
+               )
     end
 
     test "it ignores other messages", %{connection: connection} do
-      assert {:ok, connection} == Connection.update(connection, :yo)
+      assert {:ok, connection} == ConnectionProtocol.handle_message(connection, :yo)
     end
   end
 end

@@ -22,6 +22,7 @@ class DictSettings(object):
     The VirtualPrinter plugin expects a Settings object which does a lot of file I/O.
     DictSettings implements the methods VirtualPrinter expects, but backend by a dict.
     '''
+
     def __init__(self, settings):
         self._settings = settings
 
@@ -102,7 +103,9 @@ def start_printer_write_thread():
     def write_forever():
         command = recv()
         while True:
-            printer.write(command)
+            if command:
+                printer.write(command)
+
             command = recv()
 
     write_thread = Thread(target=write_forever)
