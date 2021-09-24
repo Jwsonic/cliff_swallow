@@ -3,8 +3,6 @@ defmodule Printer.Connection do
   Internal API for managing a Connection
   """
 
-  use Norms
-
   alias Printer.Connection.DynamicSupervisor, as: ConnectionSupervisor
 
   def open(connection, opts \\ []) do

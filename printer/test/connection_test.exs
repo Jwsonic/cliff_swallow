@@ -4,7 +4,6 @@ defmodule Printer.ConnectionTest do
   """
   use ExUnit.Case, async: false
   use ExUnitProperties
-  use Norms
 
   alias Printer.Connection
   alias Printer.Connection.{Echo, Overridable}

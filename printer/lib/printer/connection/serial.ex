@@ -4,26 +4,6 @@ defmodule Printer.Connection.Serial do
   """
   defstruct [:name, :pid, :speed]
 
-  use Norms
-
-  def s do
-    schema(%__MODULE__{
-      name: spec(is_binary()),
-      pid: allow_nil(spec(is_pid())),
-      speed: spec(is_integer() and fn s -> s > 0 end)
-    })
-  end
-
-  defp new_args do
-    [
-      {:name, spec(is_binary())},
-      {:speed, spec(is_integer() and fn s -> s > 0 end)}
-    ]
-    |> one_of()
-    |> coll_of(kind: &is_list/1)
-  end
-
-  @contract new(args :: new_args()) :: s()
   def new(args) do
     %__MODULE__{
       name: Keyword.fetch!(args, :name),
@@ -33,7 +13,6 @@ defmodule Printer.Connection.Serial do
   end
 
   # defimpl Printer.Connection, for: Printer.Connection.Serial do
-  #   use Norms
 
   #   alias Circuits.UART
   #   alias Printer.Connection.Serial

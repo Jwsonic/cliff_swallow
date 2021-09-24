@@ -4,15 +4,6 @@ defmodule Printer.Connection.Virtual do
   """
   defstruct [:port, :reference]
 
-  use Norms
-
-  def s do
-    schema(%__MODULE__{
-      port: allow_nil(spec(is_port())),
-      reference: allow_nil(spec(is_reference()))
-    })
-  end
-
   def new do
     %__MODULE__{
       port: nil,
@@ -21,7 +12,6 @@ defmodule Printer.Connection.Virtual do
   end
 
   # defimpl Printer.Connection, for: Printer.Connection.Virtual do
-  #   use Norms
 
   #   require Logger
 

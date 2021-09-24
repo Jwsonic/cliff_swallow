@@ -5,8 +5,6 @@ defmodule Printer.Connection.Overridable do
 
   defstruct [:open, :close, :send, :handle_response]
 
-  use Norms
-
   def new(args \\ []) do
     %__MODULE__{
       open: Keyword.get(args, :open, fn connection -> {:ok, connection} end),
