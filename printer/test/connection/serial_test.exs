@@ -5,35 +5,40 @@ defmodule Printer.Connection.SerialTest do
   use ExUnit.Case, async: false
 
   alias Circuits.UART
-  alias Printer.Connection
+  alias Printer.Connection.Protocol, as: ConnectionProtocol
   alias Printer.Connection.Serial
 
-  @dev0 "/dev/tnt0"
-  @dev1 "/dev/tnt1"
+  setup_all do
+    socat_bin = System.find_executable("socat")
 
-  @moduletag :tty0tty_required
-
-  setup context do
-    unless File.exists?(@dev0) && File.exists?(@dev1) do
-      flunk(
-        "Please make sure tty0tty(https://github.com/freemed/tty0tty) is installed before running this test."
-      )
+    if socat_bin == nil do
+      flunk("Please make sure you have socat installed.")
     end
 
-    connection = Serial.new(name: @dev0, speed: 9600)
+    dir = System.tmp_dir!()
+    write = Path.join(dir, "virtual-write")
+    read = Path.join(dir, "virtual-read")
 
-    connection =
-      case context[:no_connect] do
-        true ->
-          connection
+    port =
+      Port.open(
+        {:spawn_executable, socat_bin},
+        args: [
+          "pty,link=#{write},raw,echo=0",
+          "pty,link=#{read},raw,echo=0"
+        ]
+      )
 
-        _ ->
-          {:ok, connection} = Connection.connect(connection)
+    {:os_pid, os_pid} = Port.info(port, :os_pid)
 
-          on_exit(fn -> Connection.disconnect(connection) end)
+    on_exit(fn ->
+      System.cmd("kill", ["-9", "#{os_pid}"])
+    end)
 
-          connection
-      end
+    {:ok, read: read, write: write}
+  end
+
+  setup %{write: write} do
+    connection = Serial.new(name: write, speed: 115_200)
 
     {:ok, %{connection: connection}}
   end
@@ -43,81 +48,66 @@ defmodule Printer.Connection.SerialTest do
     assert Process.alive?(pid)
   end
 
-  describe "Serial.connect/1" do
-    @tag :no_connect
+  describe "Serial.open/1" do
     test "it spawns serial printer connection", %{connection: connection} do
-      assert connection.pid == nil
+      {:ok, %{pid: pid}} = ConnectionProtocol.open(connection)
 
-      {:ok, connection} = Connection.connect(connection)
-
-      assert_pid_alive(connection.pid)
-
-      Connection.disconnect(connection)
+      assert_pid_alive(pid)
     end
 
-    test "it does nothing if a port is already open", %{connection: connection} do
-      assert_pid_alive(connection.pid)
+    test "it returns an error if the connection is already open", %{connection: connection} do
+      {:ok, connection} = ConnectionProtocol.open(connection)
 
-      {:ok, connection2} = Connection.connect(connection)
-
-      assert connection == connection2
-      assert_pid_alive(connection2.pid)
+      assert ConnectionProtocol.open(connection) == {:error, "Serial connection already open"}
     end
 
-    test "it starts UART in active mode" do
-      {:ok, pid} = UART.start_link()
+    test "it starts UART in active mode", %{connection: connection} do
+      {:ok, %{pid: pid}} = ConnectionProtocol.open(connection)
 
-      :ok = UART.open(pid, @dev1, speed: 9600, active: false)
+      {_name, config} = UART.configuration(pid)
 
-      UART.write(pid, "ok\n")
-
-      assert_receive {:circuits_uart, @dev0, "ok"}
+      assert Keyword.fetch!(config, :active) == true
     end
   end
 
-  describe "Serial.disconnect/1" do
-    @tag :no_connect
+  describe "Serial.close/1" do
     test "it closes a port if there's one open", %{connection: connection} do
-      {:ok, connection} = Connection.connect(connection)
+      {:ok, connection} = ConnectionProtocol.open(connection)
 
       assert_pid_alive(connection.pid)
 
-      Connection.disconnect(connection)
+      assert ConnectionProtocol.close(connection) == :ok
 
       refute Process.alive?(connection.pid)
     end
 
-    @tag :no_connect
     test "it does nothing if there's no port open", %{connection: connection} do
       assert connection.pid == nil
 
-      assert Connection.disconnect(connection) == :ok
+      assert ConnectionProtocol.close(connection) == :ok
     end
   end
 
   describe "Serial.send/2" do
-    test "it sends the message to the serial port", %{connection: connection} do
+    test "it sends the message to the serial port", %{connection: connection, read: read} do
+      {:ok, connection} = ConnectionProtocol.open(connection)
+
       {:ok, pid} = UART.start_link()
 
-      :ok = UART.open(pid, @dev1, speed: 9600, active: false)
+      :ok = UART.open(pid, read, speed: 115_200, active: false)
 
-      Connection.send(connection, "G10")
+      assert ConnectionProtocol.send(connection, "G10") == :ok
 
       assert UART.read(pid) == {:ok, "G10\n"}
     end
   end
 
-  describe "Serial.update/2" do
-    test "it forwards pserial messages as connection messages", %{
+  describe "Serial.handle_message/2" do
+    test "it forwards serial messages as connection messages", %{
       connection: %{name: name} = connection
     } do
-      {:ok, _connection} = Connection.update(connection, {:circuits_uart, name, "test"})
-
-      assert_receive {:connection_data, "test"}
-    end
-
-    test "it ignores other messages", %{connection: connection} do
-      assert {:ok, connection} == Connection.update(connection, :yo)
+      {:ok, _connection, "test"} =
+        ConnectionProtocol.handle_message(connection, {:circuits_uart, name, "test"})
     end
   end
 end
