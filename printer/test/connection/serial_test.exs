@@ -2,13 +2,13 @@ defmodule Printer.Connection.SerialTest do
   @moduledoc """
   Tests for the serial printer connection.
   """
-  use ExUnit.Case, async: false
+  use ExUnit.Case
 
   alias Circuits.UART
   alias Printer.Connection.Protocol, as: ConnectionProtocol
   alias Printer.Connection.Serial
 
-  setup_all do
+  setup context do
     socat_bin = System.find_executable("socat")
 
     if socat_bin == nil do
@@ -16,17 +16,27 @@ defmodule Printer.Connection.SerialTest do
     end
 
     dir = System.tmp_dir!()
-    write = Path.join(dir, "virtual-write")
-    read = Path.join(dir, "virtual-read")
+    write = Path.join(dir, "write#{context[:line]}")
+    read = Path.join(dir, "read#{context[:line]}")
+
+    File.rm_rf(write)
+    File.rm_rf(read)
 
     port =
       Port.open(
         {:spawn_executable, socat_bin},
-        args: [
-          "pty,link=#{write},raw,echo=0",
-          "pty,link=#{read},raw,echo=0"
+        [
+          :binary,
+          :nouse_stdio,
+          args: [
+            "pty,link=#{write},raw,echo=0",
+            "pty,link=#{read},raw,echo=0"
+          ]
         ]
       )
+
+    # Ugly, but it's the easiest way make sure socat is ready
+    Process.sleep(1_000)
 
     {:os_pid, os_pid} = Port.info(port, :os_pid)
 
@@ -34,13 +44,9 @@ defmodule Printer.Connection.SerialTest do
       System.cmd("kill", ["-9", "#{os_pid}"])
     end)
 
-    {:ok, read: read, write: write}
-  end
-
-  setup %{write: write} do
     connection = Serial.new(name: write, speed: 115_200)
 
-    {:ok, %{connection: connection}}
+    {:ok, %{connection: connection, read: read, write: write}}
   end
 
   defp assert_pid_alive(pid) do
