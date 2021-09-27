@@ -36,7 +36,7 @@ defmodule Printer.Connection.SerialTest do
       )
 
     # Ugly, but it's the easiest way make sure socat is ready
-    Process.sleep(1_000)
+    Process.sleep(100)
 
     {:os_pid, os_pid} = Port.info(port, :os_pid)
 
