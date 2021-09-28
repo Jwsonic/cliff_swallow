@@ -81,7 +81,7 @@ defmodule Printer.Connection.Server do
       {:ok, connection, response} ->
         state = %{state | connection: connection}
 
-        send_to_printer(state, :connection_response, response)
+        send_to_printer(state, :connection_data, response)
 
         {:noreply, state}
 
