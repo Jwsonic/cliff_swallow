@@ -6,8 +6,26 @@ defmodule Printer do
   alias Printer.Gcode
   alias Printer.Server, as: PrinterServer
 
-  def connect(connection) do
-    GenServer.call(PrinterServer, {:connect, connection})
+  @schema_connect_opts [
+    override: [
+      type: :boolean,
+      default: false,
+      doc: "If true is passed, it will override any existing `Printer.Connection`"
+    ]
+  ]
+
+  @doc """
+  Sets the `Printer`'s current connection.
+
+  Available opts: #{NimbleOptions.docs(@schema_connect_opts)}
+  """
+
+  def connect(connection, opts \\ []) do
+    with {:ok, opts} <- NimbleOptions.validate(opts, @schema_connect_opts) do
+      override? = Keyword.get(opts, :override)
+
+      GenServer.call(PrinterServer, {:connect, connection, override?})
+    end
   end
 
   def disconnect do

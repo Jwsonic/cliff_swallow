@@ -6,61 +6,97 @@ defmodule PrinterTest do
   use ExUnitProperties
 
   alias Printer.Connection.{Echo, Overridable}
-  alias Printer.{Gcode, State}
+  alias Printer.Gcode
   alias Printer.Server, as: PrinterServer
 
-  setup context do
-    unless context[:no_connect] do
-      Printer.connect(Echo.new())
-    end
+  setup do
+    on_exit(fn -> Printer.disconnect() end)
 
-    on_exit(&Printer.disconnect/0)
+    pid = Process.whereis(PrinterServer)
+    :erlang.trace(pid, true, [:receive])
 
-    :ok
+    {:ok, %{printer_pid: pid}}
+  end
+
+  defp assert_printer_status(expected_status) do
+    %{status: actual_status} = :sys.get_state(PrinterServer)
+
+    assert expected_status == actual_status
   end
 
   describe "Printer.connect/2" do
-    @tag :no_connect
-    test "it connects when there is no connection" do
+    test "it connects when there is no connection", %{printer_pid: printer_pid} do
       assert_printer_status(:disconnected)
-      assert Printer.connect(Echo.new()) == :ok
-      assert_receive {Echo, :open}
+
+      {:ok, connection} = Overridable.new()
+
+      assert Printer.connect(connection) == :ok
+
+      assert_receive {:trace, ^printer_pid, :receive,
+                      {:connection_open, _connection_pid, _connection}}
+
       assert_printer_status(:connected)
     end
 
-    # @tag :no_connect
-    # test "it calls connect on the connection", %{connection: connection} do
-    #   assert InMemory.last_command(connection) == nil
-    #   assert Printer.connect(connection) == :ok
-    #   assert InMemory.last_command(connection) == :connect
-    # end
+    test "it overrides the exisiting connection when the option is given", %{
+      printer_pid: printer_pid
+    } do
+      {:ok, connection} = Overridable.new()
 
-    # test "it overrides the exisiting connection when the option is given", %{
-    #   connection: connection
-    # } do
-    #   {:ok, new_connection} = InMemory.start()
+      assert Printer.connect(connection, override: true) == :ok
 
-    #   assert Printer.connect(new_connection, [:override]) == :ok
-    #   assert InMemory.last_command(connection) == :disconnect
-    #   assert InMemory.last_command(new_connection) == :connect
-    # end
+      assert_receive {:trace, ^printer_pid, :receive,
+                      {:connection_open, _connection_pid, ^connection}}
 
-    # property "failing overrides lead to a disconnected state", %{connection: connection} do
-    #   check all error <- binary() do
-    #     assert InMemory.last_command(connection) == :connect
+      assert_printer_status(:connected)
 
-    #     Printer.connect(Overridable.new(open: fn -> {:error, error} end), [:override])
+      {:ok, connection2} = Overridable.new()
 
-    #     assert InMemory.last_command(connection) == :disconnect
-    #     assert :sys.get_state(Printer).status == :disconnected
-    #   end
-    # end
+      assert Printer.connect(connection, override: true) == :ok
 
-    # test "it returns an error when already connected" do
-    #   {:ok, new_connection} = InMemory.start()
+      assert_receive {:trace, ^printer_pid, :receive,
+                      {:connection_open, _connection_pid, ^connection2}}
 
-    #   assert Printer.connect(new_connection) == {:error, "Already connected"}
-    # end
+      assert_printer_status(:connected)
+    end
+
+    test "failing overrides lead to a disconnected state", %{
+      printer_pid: printer_pid
+    } do
+      {:ok, connection} = Overridable.new()
+
+      assert Printer.connect(connection) == :ok
+
+      assert_receive {:trace, ^printer_pid, :receive,
+                      {:connection_open, _connection_pid, ^connection}}
+
+      assert assert_printer_status(:connected)
+
+      {:ok, bad_connection} = Overridable.new(open: fn _ -> {:error, "Boom!"} end)
+
+      assert Printer.connect(bad_connection, override: true) == :ok
+      PrinterServer |> :sys.get_state() |> IO.inspect(label: :state)
+
+      assert_receive {:trace, ^printer_pid, :receive,
+                      {:connection_open_failed, _connection_pid, "Boom!"}}
+
+      assert assert_printer_status(:disconnected)
+    end
+
+    test "it returns an error when already connected", %{
+      printer_pid: printer_pid
+    } do
+      {:ok, connection} = Overridable.new()
+
+      assert Printer.connect(connection) == :ok
+
+      assert_receive {:trace, ^printer_pid, :receive,
+                      {:connection_open, _connection_pid, ^connection}}
+
+      assert assert_printer_status(:connected)
+
+      assert Printer.connect(connection) == {:error, "Already connected"}
+    end
   end
 
   # describe "Printer.disconnect" do
@@ -163,10 +199,4 @@ defmodule PrinterTest do
   #     assert_raise Norm.MismatchError, fn -> Printer.move([]) end
   #   end
   # end
-
-  defp assert_printer_status(status) do
-    %State{status: actual_status} = :sys.get_state(PrinterServer) |> IO.inspect(label: :state)
-
-    assert status == actual_status
-  end
 end
