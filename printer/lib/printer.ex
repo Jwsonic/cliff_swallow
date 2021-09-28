@@ -37,9 +37,10 @@ defmodule Printer do
   end
 
   def move(axes) do
-    axes
-    |> Gcode.g0()
-    |> send()
+    case Gcode.g0(axes) do
+      "G0 \n" -> {:error, "You must provide at least one axis of movement"}
+      command -> send(command)
+    end
   end
 
   def heat_hotend(temperature) do
@@ -72,7 +73,7 @@ defmodule Printer do
     |> send()
   end
 
-  def home(axes) do
+  def home(axes \\ ["X", "Y", "Z"]) do
     axes
     |> Gcode.g28()
     |> send()
