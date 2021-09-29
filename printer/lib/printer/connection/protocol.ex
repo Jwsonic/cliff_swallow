@@ -20,5 +20,5 @@ defimpl Printer.Connection.Protocol, for: Any do
   def open(_connection), do: {:error, "Not a connection."}
   def close(_connection), do: {:error, "Not a connection."}
   def send(_connection, _message), do: {:error, "Not a connection."}
-  def handle_message(_connection, _message), do: {:error, "Not a connection."}
+  def handle_message(connection, _message), do: {:error, "Not a connection.", connection}
 end
