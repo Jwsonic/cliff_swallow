@@ -6,10 +6,10 @@ defmodule Printer.ConnectionTest do
   use ExUnitProperties
 
   alias Printer.Connection
-  alias Printer.Connection.{Echo, Overridable}
+  alias Printer.Connection.{InMemory, Overridable}
 
   setup do
-    connection = Echo.new()
+    {:ok, connection} = InMemory.start_link()
     {:ok, server} = Connection.open(connection)
 
     {:ok, %{connection: connection, server: server}}
@@ -20,7 +20,8 @@ defmodule Printer.ConnectionTest do
       connection: connection,
       server: server
     } do
-      assert_receive {Echo, :open}
+      assert InMemory.last_message(connection) == :open
+
       assert_receive {:connection_open, ^server, ^connection}
     end
 
@@ -38,7 +39,7 @@ defmodule Printer.ConnectionTest do
     } do
       assert_receive {:connection_open, ^server1, ^connection}
 
-      connection2 = Echo.new()
+      {:ok, connection2} = InMemory.start_link()
 
       assert {:ok, server2} = Connection.open(connection2)
       assert_receive {:connection_open, ^server2, ^connection2}
@@ -53,7 +54,7 @@ defmodule Printer.ConnectionTest do
     test "it calls close/1 on the connection", %{connection: connection, server: server} do
       assert_receive {:connection_open, ^server, ^connection}, 1_000
       assert Connection.close(server) == :ok
-      assert_receive {Echo, :close}, 1_000
+      assert InMemory.last_message(connection) == :close
     end
 
     property "it returns the error result of close/1", %{server: server} do
@@ -69,10 +70,10 @@ defmodule Printer.ConnectionTest do
   end
 
   describe "Connection.send/1" do
-    property "it calls send/2 on the connection", %{server: server} do
+    property "it calls send/2 on the connection", %{connection: connection, server: server} do
       check all message <- binary() do
         assert Connection.send(server, message) == :ok
-        assert_receive {Echo, {:send, ^message}}
+        assert InMemory.last_message(connection) == {:send, message}
       end
     end
 
