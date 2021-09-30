@@ -18,7 +18,11 @@ defmodule Printer.Connection do
     GenServer.call(server, :close)
   end
 
+  def close(_server), do: :ok
+
   def send(server, message) when is_pid(server) do
     GenServer.call(server, {:send, message})
   end
+
+  def send(_server, _message), do: :ok
 end

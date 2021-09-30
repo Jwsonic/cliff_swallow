@@ -32,8 +32,14 @@ defmodule Printer do
     GenServer.call(PrinterServer, :disconnect)
   end
 
+  @doc false
   def send(command) do
     GenServer.call(PrinterServer, {:send, command})
+  end
+
+  @doc false
+  def reset(args \\ []) do
+    GenServer.call(PrinterServer, {:reset, args})
   end
 
   def move(axes) do

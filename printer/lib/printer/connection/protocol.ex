@@ -1,4 +1,6 @@
 defprotocol Printer.Connection.Protocol do
+  @fallback_to_any true
+
   @spec open(connection :: t()) :: {:ok, connection :: t()} | {:error, String.t()}
   def open(connection)
 

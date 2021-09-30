@@ -6,55 +6,34 @@ defmodule Printer.Server do
 
   require Logger
 
-  defmodule State do
-    @moduledoc """
-    State struct for `Printer.Server`.
-    """
-    defstruct [:connection, :status]
-  end
+  import Printer.Server.Logic
 
   alias Printer.Connection
-  alias Printer.Server.State
 
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
   end
 
   @impl GenServer
-  def init(_args) do
-    state = %State{
-      connection: nil,
-      status: :disconnected
-    }
-
-    {:ok, state}
+  def init(args) do
+    {:ok, build_initial_state(args)}
   end
 
-  # override? -> true means always connect and maybe disconnect too
-  defp connect_precheck(%State{connection: connection}, true) do
-    if is_pid(connection) do
-      Connection.close(connection)
-    end
-
-    :ok
+  @impl GenServer
+  def handle_call({:reset, args}, _from, _state) do
+    {:reply, :ok, build_initial_state(args)}
   end
-
-  # :disconnected status means it's ok to connect
-  defp connect_precheck(%State{status: :disconnected}, _override?), do: :ok
-
-  # Otherwise its an error
-  defp connect_precheck(_state, _override?), do: :already_connected
 
   @impl GenServer
   def handle_call({:connect, connection, override?}, _from, state) do
     with :ok <- connect_precheck(state, override?),
          {:ok, _connection} <- Connection.open(connection) do
-      state = %{state | connection: nil, status: :connecting}
+      state = update_connecting(state)
 
       {:reply, :ok, state}
     else
       {:error, _reason} = error ->
-        state = %{state | connection: nil, status: :disconnected}
+        state = update_disconnected(state)
 
         {:reply, error, state}
 
@@ -67,14 +46,18 @@ defmodule Printer.Server do
   def handle_call(
         :disconnect,
         _from,
-        %State{connection: connection} = state
-      ) do
-    if is_pid(connection) && Process.alive?(connection) do
-      Connection.close(connection)
-    end
+        state
+      )
+      when is_connected(state) do
+    close_connection(state)
 
-    state = %{state | connection: nil, status: :disconnected}
+    state = update_disconnected(state)
 
+    {:reply, :ok, state}
+  end
+
+  @impl GenServer
+  def handle_call(:disconnect, _from, state) do
     {:reply, :ok, state}
   end
 
@@ -83,52 +66,90 @@ defmodule Printer.Server do
     {:reply, :ok, state}
   end
 
+  # We're waiting for a response to a prior message, so add this one to the queue
   @impl GenServer
   def handle_call(
         {:send, command},
         _from,
-        %State{connection: connection, status: :connected} = state
-      ) do
-    reply = Connection.send(connection, command)
+        state
+      )
+      when is_connected(state) and
+             is_waiting(state) do
+    state = update_add_send_queue(state, command)
+
+    {:reply, :ok, state}
+  end
+
+  # The send queue is clear, so go ahead and send this message/wait
+  @impl GenServer
+  def handle_call({:send, command}, _from, state)
+      when is_connected(state) do
+    {reply, state} = send_command(state, command)
 
     {:reply, reply, state}
+  end
+
+  def handle_call({:send, _command}, _from, state) do
+    {:reply, {:error, "Printer not connected", state}}
   end
 
   @impl GenServer
   def handle_info(
         {:connection_data, connection, data},
-        %{connection: connection} = state
+        state
       )
-      when not is_nil(connection) do
+      when is_connected(state) and
+             is_from_connection(state, connection) do
     Logger.info(data, label: :printer)
+
+    with {:done, state} <- check_wait(state, data),
+         {state, command} <- next_command(state) do
+      {_reply, state} = send_command(state, command)
+
+      {:noreply, state}
+    else
+      {:wait, state} ->
+        {:noreply, state}
+
+      {:no_commands, state} ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info({:connection_open, connection_server, _connection}, state)
+      when is_connecting(state) do
+    state = update_connected(state, connection_server)
 
     {:noreply, state}
   end
 
-  def handle_info(
-        {:connection_open, connection, _connection},
-        %{status: :connecting} = state
-      ) do
-    state = %{
-      state
-      | connection: connection,
-        status: :connected
-    }
+  def handle_info({:connection_open, _connection_server, connection}, state) do
+    Logger.warn(
+      "Got :connection_open for #{inspect(connection.__struct__)} message but status was: #{state.status}"
+    )
 
     {:noreply, state}
   end
 
   def handle_info(
         {:connection_open_failed, _connection, error},
-        %{status: :connecting} = state
-      ) do
+        state
+      )
+      when is_connecting(state) do
     Logger.warn("Connection open failed with error #{error}")
 
-    state = %{
-      state
-      | connection: nil,
-        status: :disconnected
-    }
+    state = update_disconnected(state)
+
+    {:noreply, state}
+  end
+
+  def handle_info(
+        {:connection_open_failed, connection, _error},
+        state
+      ) do
+    Logger.warn(
+      "Got :connection_open_failed for #{inspect(connection.__struct__)} message but status was: #{state.status}"
+    )
 
     {:noreply, state}
   end
