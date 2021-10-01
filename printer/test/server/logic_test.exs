@@ -11,7 +11,7 @@ defmodule Printer.Server.LogicTest do
     {:ok, connection_server} = Connection.open(connection)
 
     state = %State{
-      connection: connection_server,
+      connection_server: connection_server,
       retry_count: 0,
       send_queue: :queue.new(),
       status: :connected
@@ -22,7 +22,13 @@ defmodule Printer.Server.LogicTest do
 
   describe "connect_precheck/2" do
     test "returns :already_connected if there's a connection" do
-      assert Logic.connect_precheck(%State{connection: nil, status: :connected}, false) ==
+      assert Logic.connect_precheck(
+               %State{
+                 connection_server: nil,
+                 status: :connected
+               },
+               false
+             ) ==
                :already_connected
     end
 
@@ -46,7 +52,7 @@ defmodule Printer.Server.LogicTest do
                {:ok,
                 %{
                   state
-                  | connection: nil,
+                  | connection_server: nil,
                     status: :connecting
                 }}
 
@@ -60,7 +66,11 @@ defmodule Printer.Server.LogicTest do
     test "updates the state to mark :connected" do
       state = %State{}
 
-      assert Logic.connected(state, self()) == %{state | connection: self(), status: :connected}
+      assert Logic.connected(state, self()) == %{
+               state
+               | connection_server: self(),
+                 status: :connected
+             }
     end
   end
 
@@ -194,7 +204,11 @@ defmodule Printer.Server.LogicTest do
   describe "close_connection/1" do
     test "closes the active connection",
          %{connection: connection, state: state} do
-      assert Logic.close_connection(state) == %{state | connection: nil, status: :disconnected}
+      assert Logic.close_connection(state) == %{
+               state
+               | connection_server: nil,
+                 status: :disconnected
+             }
 
       assert InMemory.last_message(connection) == :close
     end

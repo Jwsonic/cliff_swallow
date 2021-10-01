@@ -13,16 +13,17 @@ defmodule Printer.Server.Logic do
   defguard is_connected(state)
            when is_state(state) and
                   state.status == :connected and
-                  is_pid(state.connection)
+                  is_pid(state.connection_server)
 
   defguard is_waiting(state) when is_state(state) and state.wait != nil
 
-  defguard is_from_connection(state, connection)
-           when is_state(state) and is_pid(connection) and state.connection == connection
+  defguard is_from_connection(state, connection_server)
+           when is_state(state) and is_pid(connection_server) and
+                  state.connection_server == connection_server
 
   def build_initial_state(_args \\ []) do
     %State{
-      connection: nil,
+      connection_server: nil,
       retry_count: 0,
       send_queue: :queue.new(),
       status: :disconnected,
@@ -33,9 +34,9 @@ defmodule Printer.Server.Logic do
 
   # override? -> true means always connect and maybe disconnect too
   @spec connect_precheck(state :: State.t(), override? :: boolean()) :: :ok
-  def connect_precheck(%State{connection: connection}, true) do
-    if is_pid(connection) do
-      Connection.close(connection)
+  def connect_precheck(%State{connection_server: connection_server}, true) do
+    if is_pid(connection_server) do
+      Connection.close(connection_server)
     end
 
     :ok
@@ -55,7 +56,7 @@ defmodule Printer.Server.Logic do
       {:ok, _connection} ->
         state = %{
           state
-          | connection: nil,
+          | connection_server: nil,
             status: :connecting
         }
 
@@ -64,7 +65,7 @@ defmodule Printer.Server.Logic do
       {:error, reason} ->
         state = %{
           state
-          | connection: nil,
+          | connection_server: nil,
             status: :disconnected
         }
 
@@ -72,24 +73,24 @@ defmodule Printer.Server.Logic do
     end
   end
 
-  @spec connected(state :: State.t(), connection :: pid()) :: State.t()
-  def connected(%State{} = state, connection) do
+  @spec connected(state :: State.t(), connection_server :: pid()) :: State.t()
+  def connected(%State{} = state, connection_server) do
     %{
       state
-      | connection: connection,
+      | connection_server: connection_server,
         status: :connected
     }
   end
 
   @spec close_connection(state :: State.t()) :: State.t()
-  def close_connection(%State{connection: connection} = state) do
-    if Process.alive?(connection) do
-      Connection.close(connection)
+  def close_connection(%State{connection_server: connection_server} = state) do
+    if is_pid(connection_server) && Process.alive?(connection_server) do
+      Connection.close(connection_server)
     end
 
     %{
       state
-      | connection: nil,
+      | connection_server: nil,
         status: :disconnected
     }
   end
@@ -97,7 +98,7 @@ defmodule Printer.Server.Logic do
   @spec send_command(state :: State.t(), command :: String.t()) ::
           {reply :: any(), state :: State.t()}
   def send_command(%State{} = state, command) do
-    reply = Connection.send(state.connection, command)
+    reply = Connection.send(state.connection_server, command)
     wait = Wait.build(command)
     timeout_reference = Wait.schedule_timeout(wait)
 

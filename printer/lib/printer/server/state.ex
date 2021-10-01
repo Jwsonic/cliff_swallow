@@ -3,7 +3,7 @@ defmodule Printer.Server.State do
   State struct for `Printer.Server`.
   """
   defstruct [
-    :connection,
+    :connection_server,
     :retry_count,
     :send_queue,
     :status,
