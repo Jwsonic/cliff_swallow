@@ -20,11 +20,13 @@ defmodule Printer.Server.Logic do
   defguard is_from_connection(state, connection)
            when is_state(state) and is_pid(connection) and state.connection == connection
 
-  def build_initial_state(_args) do
+  def build_initial_state(_args \\ []) do
     %State{
       connection: nil,
+      retry_count: 0,
       send_queue: :queue.new(),
       status: :disconnected,
+      timeout_reference: nil,
       wait: nil
     }
   end
@@ -45,32 +47,121 @@ defmodule Printer.Server.Logic do
   # Otherwise its an error
   def connect_precheck(_state, _override?), do: :already_connected
 
+  @spec open_connection(state :: State.t(), connection :: any()) ::
+          {:ok, state :: State.t()}
+          | {:error, reason :: String.t(), state :: State.t()}
+  def open_connection(%State{} = state, connection) do
+    case Connection.open(connection) do
+      {:ok, _connection} ->
+        state = %{
+          state
+          | connection: nil,
+            status: :connecting
+        }
+
+        {:ok, state}
+
+      {:error, reason} ->
+        state = %{
+          state
+          | connection: nil,
+            status: :disconnected
+        }
+
+        {:error, reason, state}
+    end
+  end
+
+  @spec connected(state :: State.t(), connection :: pid()) :: State.t()
+  def connected(%State{} = state, connection) do
+    %{
+      state
+      | connection: connection,
+        status: :connected
+    }
+  end
+
   @spec close_connection(state :: State.t()) :: State.t()
-  def close_connection(%State{connection: connection}) do
+  def close_connection(%State{connection: connection} = state) do
     if Process.alive?(connection) do
       Connection.close(connection)
     end
 
-    :ok
+    %{
+      state
+      | connection: nil,
+        status: :disconnected
+    }
   end
 
   @spec send_command(state :: State.t(), command :: String.t()) ::
           {reply :: any(), state :: State.t()}
   def send_command(%State{} = state, command) do
     reply = Connection.send(state.connection, command)
-    state = update_wait(state, command)
+    wait = Wait.build(command)
+    timeout_reference = Wait.schedule_timeout(wait)
+
+    state = %{
+      state
+      | timeout_reference: timeout_reference,
+        wait: wait
+    }
 
     {reply, state}
+  end
+
+  @spec add_to_send_queue(state :: State.t(), command :: String.t()) :: State.t()
+  def add_to_send_queue(%State{send_queue: send_queue} = state, command) do
+    %{
+      state
+      | send_queue: :queue.in(command, send_queue)
+    }
+  end
+
+  @max_retry_count 5
+
+  @spec retry_send_command(state :: State.t()) :: {:ok, State.t()} | {:error, String.t()}
+  def retry_send_command(%State{} = state) do
+    retry_count = state.retry_count + 1
+
+    case retry_count > @max_retry_count do
+      true ->
+        {:error, "Over max retry count"}
+
+      false ->
+        {_reply, state} = send_command(state, state.wait.command)
+
+        state = %{state | retry_count: retry_count}
+
+        {:ok, state}
+    end
   end
 
   @spec check_wait(state :: State.t(), response :: String.t()) ::
           {:wait, state :: State.t()} | {:done, State.t()}
   def check_wait(%State{wait: wait} = state, response) do
     case Wait.check(wait, response) do
-      :done -> {:done, %{state | wait: nil}}
-      {:wait, wait} -> {:wait, %{state | wait: wait}}
+      :done ->
+        {:done, %{state | timeout_reference: nil, wait: nil}}
+
+      {:wait, wait} ->
+        {:wait, %{state | wait: wait}}
     end
   end
+
+  @spec check_timeout(state :: State.t(), reference :: reference()) ::
+          :ignore | :retry
+  def check_timeout(
+        %State{
+          timeout_reference: timeout_reference,
+          wait: %Wait{}
+        },
+        timeout_reference
+      ) do
+    :retry
+  end
+
+  def check_timeout(_state, _reference), do: :ignore
 
   @spec next_command(state :: State.t()) ::
           {:no_commands, state :: :State.t()} | {state :: State.t(), command :: String.t()}
@@ -79,48 +170,5 @@ defmodule Printer.Server.Logic do
       {:empty, _send_queue} -> {:no_commands, state}
       {{:value, command}, send_queue} -> {%{state | send_queue: send_queue}, command}
     end
-  end
-
-  @spec update_connecting(state :: State.t()) :: State.t()
-  def update_connecting(%State{} = state) do
-    %{
-      state
-      | connection: nil,
-        status: :connecting
-    }
-  end
-
-  @spec update_connected(state :: State.t(), connection :: pid()) :: State.t()
-  def update_connected(%State{} = state, connection) do
-    %{
-      state
-      | connection: connection,
-        status: :connected
-    }
-  end
-
-  @spec update_disconnected(state :: State.t()) :: State.t()
-  def update_disconnected(%State{} = state) do
-    %{
-      state
-      | connection: nil,
-        status: :disconnected
-    }
-  end
-
-  @spec update_add_send_queue(state :: State.t(), command :: String.t()) :: State.t()
-  def update_add_send_queue(%State{send_queue: send_queue} = state, command) do
-    %{
-      state
-      | send_queue: :queue.in(command, send_queue)
-    }
-  end
-
-  @spec update_wait(state :: State.t(), command :: String.t()) :: State.t()
-  def update_wait(%State{} = state, command) do
-    %{
-      state
-      | wait: Wait.build(command)
-    }
   end
 end

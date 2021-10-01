@@ -8,8 +8,6 @@ defmodule Printer.Server do
 
   import Printer.Server.Logic
 
-  alias Printer.Connection
-
   def start_link(args) do
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
   end
@@ -27,15 +25,11 @@ defmodule Printer.Server do
   @impl GenServer
   def handle_call({:connect, connection, override?}, _from, state) do
     with :ok <- connect_precheck(state, override?),
-         {:ok, _connection} <- Connection.open(connection) do
-      state = update_connecting(state)
-
+         {:ok, state} <- open_connection(state, connection) do
       {:reply, :ok, state}
     else
-      {:error, _reason} = error ->
-        state = update_disconnected(state)
-
-        {:reply, error, state}
+      {:error, reason, state} ->
+        {:reply, {:error, reason}, state}
 
       :already_connected ->
         {:reply, {:error, "Already connected"}, state}
@@ -49,9 +43,7 @@ defmodule Printer.Server do
         state
       )
       when is_connected(state) do
-    close_connection(state)
-
-    state = update_disconnected(state)
+    state = close_connection(state)
 
     {:reply, :ok, state}
   end
@@ -75,7 +67,7 @@ defmodule Printer.Server do
       )
       when is_connected(state) and
              is_waiting(state) do
-    state = update_add_send_queue(state, command)
+    state = add_to_send_queue(state, command)
 
     {:reply, :ok, state}
   end
@@ -118,7 +110,7 @@ defmodule Printer.Server do
 
   def handle_info({:connection_open, connection_server, _connection}, state)
       when is_connecting(state) do
-    state = update_connected(state, connection_server)
+    state = connected(state, connection_server)
 
     {:noreply, state}
   end
@@ -138,7 +130,7 @@ defmodule Printer.Server do
       when is_connecting(state) do
     Logger.warn("Connection open failed with error #{error}")
 
-    state = update_disconnected(state)
+    state = close_connection(state)
 
     {:noreply, state}
   end
@@ -153,6 +145,11 @@ defmodule Printer.Server do
 
     {:noreply, state}
   end
+
+  # TODO
+  # def handle_info({:send_timeout, reference}, sate) do
+  #   {:noreply, state}
+  # end
 
   def handle_info(message, state) do
     Logger.warn("Unhandled message: #{inspect(message)}")

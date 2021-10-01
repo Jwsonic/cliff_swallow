@@ -2,28 +2,34 @@ defmodule Printer.Server.LogicTest do
   use ExUnit.Case
   use ExUnitProperties
 
+  alias Printer.Connection
+  alias Printer.Connection.InMemory
   alias Printer.Server.{Logic, State, Wait}
 
   setup do
+    {:ok, connection} = InMemory.start_link()
+    {:ok, connection_server} = Connection.open(connection)
+
     state = %State{
-      connection: self(),
+      connection: connection_server,
+      retry_count: 0,
       send_queue: :queue.new(),
       status: :connected
     }
 
-    {:ok, %{state: state}}
+    {:ok, %{connection: connection, state: state}}
   end
 
   describe "connect_precheck/2" do
     test "returns :already_connected if there's a connection" do
-      assert Logic.connect_precheck(%State{connection: self(), status: :connected}, false) ==
+      assert Logic.connect_precheck(%State{connection: nil, status: :connected}, false) ==
                :already_connected
     end
 
-    test "override?=true calls Connection.close/1", %{state: state} do
-      Task.async(fn -> Logic.connect_precheck(state, true) end)
+    test "override?=true calls Connection.close/1", %{connection: connection, state: state} do
+      Logic.connect_precheck(state, true)
 
-      assert_receive {:"$gen_call", {_pid, _ref}, :close}
+      assert InMemory.last_message(connection) == :close
     end
 
     test "disconnected returns ok" do
@@ -31,34 +37,73 @@ defmodule Printer.Server.LogicTest do
     end
   end
 
-  describe "send_command/2" do
-    property "calls Connection.send/2", %{state: state} do
-      check all command <- binary() do
-        Task.async(fn -> Logic.send_command(state, command) end)
+  describe "open_connection/2" do
+    test "calls Connection.open/1 on the connection" do
+      {:ok, connection} = InMemory.start_link()
+      state = Logic.build_initial_state()
 
-        assert_receive {:"$gen_call", {_pid, _ref}, {:send, ^command}}
+      assert Logic.open_connection(state, connection) ==
+               {:ok,
+                %{
+                  state
+                  | connection: nil,
+                    status: :connecting
+                }}
+
+      assert_receive {:connection_open, _connection_server, ^connection}
+
+      assert InMemory.last_message(connection) == :open
+    end
+  end
+
+  describe "connected/2" do
+    test "updates the state to mark :connected" do
+      state = %State{}
+
+      assert Logic.connected(state, self()) == %{state | connection: self(), status: :connected}
+    end
+  end
+
+  describe "send_command/2" do
+    property "calls Connection.send/2", %{connection: connection, state: state} do
+      check all command <- binary() do
+        Logic.send_command(state, command)
+
+        assert InMemory.last_message(connection) == {:send, command}
       end
     end
 
-    property "updates the state with a new wait", %{state: state} do
+    property "updates the state", %{state: state} do
       check all command <- binary() do
-        state = %{
-          state
-          | connection: :none
-        }
+        {:ok,
+         %{
+           timeout_reference: timeout_reference,
+           wait: %Wait{}
+         }} = Logic.send_command(state, command)
 
-        expected_state = %{state | wait: Wait.build(command)}
-
-        assert Logic.send_command(state, command) == {:ok, expected_state}
+        assert is_reference(timeout_reference)
       end
+    end
+
+    test "schedules a timeout", %{connection: connection, state: state} do
+      {_reply,
+       %{
+         timeout_reference: timeout_reference,
+         wait: %{timeout: timeout}
+       }} = Logic.send_command(state, "G0")
+
+      assert InMemory.last_message(connection) == {:send, "G0"}
+
+      assert_receive {:send_timeout, ^timeout_reference}, timeout + 100
     end
   end
 
   describe "check_wait/2" do
     test "it returns :done when the response matches", %{state: state} do
-      state = %{state | wait: Wait.build("G0 X1")}
+      state = %{state | timeout_reference: make_ref(), wait: Wait.build("G0 X1")}
 
-      assert Logic.check_wait(state, "ok") == {:done, %{state | wait: nil}}
+      assert Logic.check_wait(state, "ok") ==
+               {:done, %{state | timeout_reference: nil, wait: nil}}
     end
 
     property "it returns :wait with new state when we need to wait longer", %{state: state} do
@@ -81,8 +126,48 @@ defmodule Printer.Server.LogicTest do
     end
   end
 
+  describe "check_timeout/2" do
+    test "it returns :ingore when the timeout can be ignored",
+         %{state: state} do
+      assert Logic.check_timeout(state, make_ref()) == :ignore
+    end
+
+    test "it returns :retry when the command should be sent again",
+         %{state: state} do
+      timeout_reference = make_ref()
+
+      state = %{
+        state
+        | timeout_reference: timeout_reference,
+          wait: %Wait{}
+      }
+
+      assert Logic.check_timeout(state, timeout_reference) ==
+               :retry
+    end
+  end
+
+  describe "retry_send_command/1" do
+    test "sends the command again", %{state: state} do
+      {_reply, state} = Logic.send_command(state, "G0")
+
+      retry_count = state.retry_count + 1
+
+      assert {:ok, %{retry_count: ^retry_count}} = Logic.retry_send_command(state)
+    end
+
+    test "returns an error when we're over the retry limit", %{state: state} do
+      {_reply, state} = Logic.send_command(state, "G0")
+
+      state = %{state | retry_count: 5}
+
+      assert Logic.retry_send_command(state) ==
+               {:error, "Over max retry count"}
+    end
+  end
+
   describe "next_command/1" do
-    test "returns :no_commands and same state when the queue is empty", %{state: state} do
+    test "returns :no_commands and clears the timeout reference", %{state: state} do
       assert {:no_commands, state} == Logic.next_command(state)
     end
 
@@ -92,6 +177,26 @@ defmodule Printer.Server.LogicTest do
 
         assert Logic.next_command(new_state) == {state, command}
       end
+    end
+  end
+
+  describe "add_to_send_queue/2" do
+    property "adds command to the send queue", %{state: state} do
+      check all command <- binary() do
+        assert Logic.add_to_send_queue(state, command) == %{
+                 state
+                 | send_queue: :queue.in(command, state.send_queue)
+               }
+      end
+    end
+  end
+
+  describe "close_connection/1" do
+    test "closes the active connection",
+         %{connection: connection, state: state} do
+      assert Logic.close_connection(state) == %{state | connection: nil, status: :disconnected}
+
+      assert InMemory.last_message(connection) == :close
     end
   end
 end

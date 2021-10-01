@@ -3,9 +3,17 @@ defmodule Printer.Server.Wait do
   Logic around which commands a printer should wait for, and how long.
   """
 
-  defstruct [:command, :context, :response_matcher, :timeout]
+  defstruct [
+    :command,
+    :context,
+    :reference,
+    :response_matcher,
+    :timeout
+  ]
 
-  @type t() :: %__MODULE__{}
+  alias __MODULE__
+
+  @type t() :: %Wait{}
 
   defp ok_response_matcher(_context, "ok"), do: :done
   defp ok_response_matcher(context, _response), do: {:wait, context}
@@ -25,7 +33,7 @@ defmodule Printer.Server.Wait do
   @spec build(command :: String.t()) :: t()
 
   def build("M109" <> _rest = command) do
-    %__MODULE__{
+    %Wait{
       command: command,
       context: nil,
       response_matcher: &m109_response_matcher/2,
@@ -34,18 +42,27 @@ defmodule Printer.Server.Wait do
   end
 
   def build(command) do
-    %__MODULE__{
+    %Wait{
       command: command,
       context: nil,
       response_matcher: &ok_response_matcher/2,
-      timeout: 1_000
+      timeout: 500
     }
   end
 
   @spec check(wait :: t(), response :: String.t()) :: {:wait, t()} | :done
-  def check(%__MODULE__{context: context, response_matcher: response_matcher} = wait, response) do
+  def check(%Wait{context: context, response_matcher: response_matcher} = wait, response) do
     with {:wait, context} <- apply(response_matcher, [context, response]) do
       {:wait, %{wait | context: context}}
     end
+  end
+
+  @spec schedule_timeout(wait :: t()) :: reference()
+  def schedule_timeout(%Wait{timeout: timeout}) do
+    reference = make_ref()
+
+    Process.send_after(self(), {:send_timeout, reference}, timeout)
+
+    reference
   end
 end
