@@ -172,7 +172,7 @@ defmodule Printer.Server.LogicTest do
       state = %{state | retry_count: 5}
 
       assert Logic.retry_send_command(state) ==
-               {:error, "Over max retry count"}
+               {:error, "Over max retry count for G0"}
     end
   end
 
@@ -204,10 +204,13 @@ defmodule Printer.Server.LogicTest do
   describe "close_connection/1" do
     test "closes the active connection",
          %{connection: connection, state: state} do
+      state = %{state | retry_count: 3}
+
       assert Logic.close_connection(state) == %{
                state
                | connection_server: nil,
-                 status: :disconnected
+                 status: :disconnected,
+                 retry_count: 0
              }
 
       assert InMemory.last_message(connection) == :close

@@ -83,16 +83,12 @@ defmodule Printer.Server.Logic do
   end
 
   @spec close_connection(state :: State.t()) :: State.t()
-  def close_connection(%State{connection_server: connection_server} = state) do
+  def close_connection(%State{connection_server: connection_server}) do
     if is_pid(connection_server) && Process.alive?(connection_server) do
       Connection.close(connection_server)
     end
 
-    %{
-      state
-      | connection_server: nil,
-        status: :disconnected
-    }
+    build_initial_state()
   end
 
   @spec send_command(state :: State.t(), command :: String.t()) ::
@@ -124,13 +120,14 @@ defmodule Printer.Server.Logic do
   @spec retry_send_command(state :: State.t()) :: {:ok, State.t()} | {:error, String.t()}
   def retry_send_command(%State{} = state) do
     retry_count = state.retry_count + 1
+    command = state.wait.command
 
     case retry_count > @max_retry_count do
       true ->
-        {:error, "Over max retry count"}
+        {:error, "Over max retry count for #{command}"}
 
       false ->
-        {_reply, state} = send_command(state, state.wait.command)
+        {_reply, state} = send_command(state, command)
 
         state = %{state | retry_count: retry_count}
 

@@ -146,10 +146,24 @@ defmodule Printer.Server do
     {:noreply, state}
   end
 
-  # TODO
-  # def handle_info({:send_timeout, reference}, sate) do
-  #   {:noreply, state}
-  # end
+  def handle_info({:send_timeout, reference}, state) do
+    state =
+      with :retry <- check_timeout(state, reference),
+           {:ok, state} <- retry_send_command(state) do
+        state
+      else
+        :ignore ->
+          state
+
+        {:error, error} ->
+          Logger.error(error)
+          Logger.info("Closing connection due to retry failure.")
+
+          close_connection(state)
+      end
+
+    {:noreply, state}
+  end
 
   def handle_info(message, state) do
     Logger.warn("Unhandled message: #{inspect(message)}")
