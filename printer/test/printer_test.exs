@@ -17,6 +17,7 @@ defmodule PrinterTest do
     on_exit(fn -> Printer.reset() end)
 
     printer_pid = Process.whereis(PrinterServer)
+
     :erlang.trace(printer_pid, true, [:receive])
 
     {:ok, connection} = InMemory.start_link()
@@ -107,7 +108,8 @@ defmodule PrinterTest do
   end
 
   describe "Printer.disconnect/1" do
-    test "it calls close on the connection", %{connection: connection} do
+    test "it calls close on the connection",
+         %{connection: connection} do
       assert assert_printer_status(:connected)
 
       assert Printer.disconnect() == :ok

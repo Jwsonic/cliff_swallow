@@ -7,10 +7,12 @@ defmodule Printer.Server.ResponseParser do
 
   ok =
     string("ok")
+    |> ignore(optional(string("\n")))
     |> eos()
 
   start =
     string("start")
+    |> ignore(optional(string("\n")))
     |> eos()
 
   defp parse_float(_rest, args, context, _line, _offset) do
@@ -54,10 +56,11 @@ defmodule Printer.Server.ResponseParser do
   resend =
     ignore(
       choice([
-        string("rs "),
-        string("Resend ")
+        string("rs:"),
+        string("Resend:")
       ])
     )
+    |> ignore(optional(string(" ")))
     |> integer(min: 1)
     |> unwrap_and_tag(:resend)
 
@@ -87,15 +90,17 @@ defmodule Printer.Server.ResponseParser do
           | :start
           | {:resend, line :: pos_integer()}
           | {:error, error :: String.t()}
-          | {:ok}
+          | {:busy, reason :: String.t()}
+          | {:extruder_temperature, temperature :: float()}
+          | {:bed_temperature, temperature :: float()}
+          | {:ok, temperature_data :: map()}
+          | {:parse_error, error :: String.t()}
   def parse(data) do
     case do_parse(data) do
       {:ok, ["ok"], _, _, _, _} -> :ok
       {:ok, ["start"], _, _, _, _} -> :start
-      {:ok, [{:resend, line}], _, _, _, _} -> {:resend, line}
-      {:ok, [{:error, error}], _, _, _, _} -> {:error, error}
-      {:ok, [{:busy, reason}], _, _, _, _} -> {:busy, reason}
-      {:ok, data, _, _, _, _} -> {:temperature, Map.new(data)}
+      {:ok, [{_tag, _data} = tagged_tuple], _, _, _, _} -> tagged_tuple
+      {:ok, data, _, _, _, _} -> {:ok, Map.new(data)}
       {:error, error, _, _, _, _} -> {:parse_error, error}
     end
   end

@@ -32,7 +32,7 @@ defmodule Printer.Connection.Server do
 
   @impl GenServer
   def handle_continue(:open_connection, %State{connection: connection} = state) do
-    case ConnectionProtocol.open(connection) do
+    case ConnectionProtocol.open(connection) |> IO.inspect(label: :open) do
       {:ok, connection} ->
         state = %{state | connection: connection}
 

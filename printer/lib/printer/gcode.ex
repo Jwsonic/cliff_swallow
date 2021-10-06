@@ -15,7 +15,7 @@ defmodule Printer.Gcode do
       |> Enum.map(fn {axis, value} -> "#{axis}#{value}" end)
       |> Enum.join(" ")
 
-    "G0 #{params}\n"
+    "G0 #{params}"
   end
 
   @doc """
@@ -29,7 +29,7 @@ defmodule Printer.Gcode do
       |> Enum.map(fn {axis, value} -> "#{axis}#{value}" end)
       |> Enum.join(" ")
 
-    "G1 #{params}\n"
+    "G1 #{params}"
   end
 
   @doc """
@@ -41,31 +41,31 @@ defmodule Printer.Gcode do
       |> Enum.sort()
       |> Enum.join(" ")
 
-    "G28 #{params}\n"
+    "G28 #{params}"
   end
 
   @doc """
   Builds a [set hotend temperature](https://marlinfw.org/docs/gcode/M104.html) command.
   """
-  def m104(temperature), do: "M104 S#{temperature}\n"
+  def m104(temperature), do: "M104 S#{temperature}"
 
   @doc """
   Builds a [wait for hotend](https://marlinfw.org/docs/gcode/M109.html) command.
   """
-  def m109(temperature), do: "M109 S#{temperature}\n"
+  def m109(temperature), do: "M109 S#{temperature}"
 
   @doc """
   Returns the [e-stop](https://marlinfw.org/docs/gcode/M112.html) command.
   """
-  def m112, do: "M112\n"
+  def m112, do: "M112"
 
   @doc """
   Builds a [set bed temperature](https://marlinfw.org/docs/gcode/M140.html) command.
   """
-  def m140(temperature), do: "M140 S#{temperature}\n"
+  def m140(temperature), do: "M140 S#{temperature}"
 
   @doc """
   Builds a [temperature auto report](https://marlinfw.org/docs/gcode/M155.html) command.
   """
-  def m155(interval), do: "M155 S#{interval}\n"
+  def m155(interval), do: "M155 S#{interval}"
 end

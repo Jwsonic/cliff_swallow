@@ -4,7 +4,7 @@ defmodule Printer.Server.LogicTest do
 
   alias Printer.Connection
   alias Printer.Connection.InMemory
-  alias Printer.Server.{Logic, State, Wait}
+  alias Printer.Server.{Logic, PrintJob, State, Wait}
 
   setup do
     {:ok, connection} = InMemory.start_link()
@@ -74,6 +74,33 @@ defmodule Printer.Server.LogicTest do
     end
   end
 
+  describe "send_precheck/2" do
+    property "only estop is ok during a print job", %{state: state} do
+      state = %{state | status: :printing, print_job: %PrintJob{}}
+
+      assert Logic.send_precheck(state, "M112") == :ok
+
+      check all command <- binary(),
+                command != "M112" do
+        assert Logic.send_precheck(state, command) == {:error, "Print job in progress"}
+      end
+    end
+
+    property "anything is ok when connected", %{state: state} do
+      check all command <- binary() do
+        assert Logic.send_precheck(state, command) == :ok
+      end
+    end
+
+    property "nothing is ok when disconnected", %{state: state} do
+      state = %{state | status: :disconnected}
+
+      check all command <- binary() do
+        assert Logic.send_precheck(state, command) == {:error, "Not connected"}
+      end
+    end
+  end
+
   describe "send_command/2" do
     property "calls Connection.send/2", %{connection: connection, state: state} do
       check all command <- binary() do
@@ -134,6 +161,12 @@ defmodule Printer.Server.LogicTest do
 
       assert {:done, %State{}} = Logic.check_wait(state, "ok")
     end
+
+    test "returns :done when not waiting", %{state: state} do
+      check all response <- binary() do
+        assert Logic.check_wait(state, response) == {:done, state}
+      end
+    end
   end
 
   describe "check_timeout/2" do
@@ -166,10 +199,10 @@ defmodule Printer.Server.LogicTest do
       assert {:ok, %{retry_count: ^retry_count}} = Logic.retry_send_command(state)
     end
 
-    test "returns an error when we're over the retry limit", %{state: state} do
+    test "returns an error when over the retry limit", %{state: state} do
       {_reply, state} = Logic.send_command(state, "G0")
 
-      state = %{state | retry_count: 5}
+      state = %{state | retry_count: 10}
 
       assert Logic.retry_send_command(state) ==
                {:error, "Over max retry count for G0"}
@@ -178,7 +211,7 @@ defmodule Printer.Server.LogicTest do
 
   describe "next_command/1" do
     test "returns :no_commands and clears the timeout reference", %{state: state} do
-      assert {:no_commands, state} == Logic.next_command(state)
+      assert :no_commands == Logic.next_command(state)
     end
 
     property "returns updated state and command when there are messages", %{state: state} do
@@ -187,6 +220,22 @@ defmodule Printer.Server.LogicTest do
 
         assert Logic.next_command(new_state) == {state, command}
       end
+    end
+
+    test "when printing, returns the next print job command", %{state: state} do
+      state = %{
+        state
+        | status: :printing,
+          print_job: %PrintJob{
+            pid: File.open!("priv/calicat.gcode"),
+            path: "priv/calicat.gcode",
+            start_time: DateTime.utc_now()
+          }
+      }
+
+      assert Logic.next_command(state) == {state, "M140 S60\n"}
+      assert Logic.next_command(state) == {state, "M105\n"}
+      assert Logic.next_command(state) == {state, "M190 S60\n"}
     end
   end
 

@@ -1,8 +1,12 @@
+from erlport.erlterms import Atom
+from erlport.erlang import cast
+
 from octoprint.plugin import plugin_manager
 from octoprint.plugins.virtual_printer import VirtualPrinterPlugin
 from octoprint.plugins.virtual_printer.virtual import VirtualPrinter, VirtualEEPROM
 from threading import Thread
 
+import asyncio
 import os
 import psutil
 import signal
@@ -59,73 +63,23 @@ class DictSettings(object):
 settings = DictSettings(VirtualPrinterPlugin().get_settings_defaults())
 printer = VirtualPrinter(settings, '.')
 
+VIRTUAL_PRINTER = Atom(b'virtual_printer')
+OK = Atom(b'ok')
 
-def start_printer_read_thread():
+
+def start_read(pid):
     def read_forever():
-        """Reads messages from the virtual printer. b'wait' messages are discarded"""
-        stream = os.fdopen(4, 'wb')
-
         while True:
             line = printer.readline()
 
-            if line != b'wait':
-                header = struct.pack('!I', len(line))
-
-                try:
-                    stream.write(header)
-                    stream.write(line)
-                    stream.flush()
-                except:
-                    pass
+            if line and line != b'wait':
+                cast(pid, (VIRTUAL_PRINTER, bytes(line)))
 
     read_thread = Thread(target=read_forever)
     read_thread.start()
 
-    return read_thread
+    return OK
 
 
-def start_printer_write_thread():
-    stream = os.fdopen(3, 'rb')
-
-    def recv():
-        """Read an Erlang term from an input stream."""
-        header = stream.read(4)
-        if len(header) != 4:
-            return None  # EOF
-
-        (length, ) = struct.unpack('!I', header)
-        payload = stream.read(length)
-        if len(payload) != length:
-            return None
-
-        return payload
-
-    def write_forever():
-        command = recv()
-        while True:
-            if command:
-                printer.write(command)
-
-            command = recv()
-
-    write_thread = Thread(target=write_forever)
-    write_thread.start()
-
-    return write_thread
-
-
-def wait_until_parent_exits():
-    # Our parent is whatever Elixir process that spawned us
-    parent = os.getppid()
-
-    while parent != 1 and psutil.pid_exists(parent):
-        pass
-
-    # sys.exit doesn't seem to work properly, so we go for the kill
-    os.kill(os.getpid(), signal.SIGKILL)
-
-
-if __name__ == '__main__':
-    start_printer_read_thread()
-    start_printer_write_thread()
-    wait_until_parent_exits()
+def write(command):
+    printer.write(command)

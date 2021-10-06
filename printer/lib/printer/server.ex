@@ -54,61 +54,78 @@ defmodule Printer.Server do
   end
 
   @impl GenServer
-  def handle_call({:print_start, _path}, _from, state) do
+  def handle_call({:print_start, path}, _from, state) do
+    case start_print(state, path) do
+      {:ok, state} ->
+        {:reply, :ok, state}
+
+      {:error, _reason} = error ->
+        {:reply, error, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_call(:print_stop, _from, state) do
     {:reply, :ok, state}
   end
 
-  # We're waiting for a response to a prior message, so add this one to the queue
   @impl GenServer
-  def handle_call(
-        {:send, command},
-        _from,
-        state
-      )
-      when is_connected(state) and
-             is_waiting(state) do
-    state = add_to_send_queue(state, command)
+  def handle_call({:send, command}, _from, state) do
+    with :ok <- send_precheck(state, command) |> IO.inspect(label: :precheck) do
+      {reply, state} = send_command(state, command)
+      {:reply, reply, state}
+    else
+      :wating ->
+        state = add_to_send_queue(state, command)
+        {:reply, :ok, state}
 
-    {:reply, :ok, state}
-  end
-
-  # The send queue is clear, so go ahead and send this message/wait
-  @impl GenServer
-  def handle_call({:send, command}, _from, state)
-      when is_connected(state) do
-    {reply, state} = send_command(state, command)
-
-    {:reply, reply, state}
-  end
-
-  def handle_call({:send, _command}, _from, state) do
-    {:reply, {:error, "Printer not connected", state}}
+      reply ->
+        {:reply, reply, state}
+    end
   end
 
   @impl GenServer
+
   def handle_info(
         {:connection_data, connection, data},
         state
       )
-      when is_connected(state) and
+      when (is_connected(state) or is_printing(state)) and
              is_from_connection(state, connection) do
     Logger.info(data, label: :printer)
 
-    with {:done, state} <- check_wait(state, data),
-         {state, command} <- next_command(state) do
-      {_reply, state} = send_command(state, command)
+    state =
+      case process_response(state, data) do
+        {:ignore, state} ->
+          state
 
-      {:noreply, state}
-    else
-      {:wait, state} ->
-        {:noreply, state}
+        {:send_next, state} ->
+          send_next(state)
 
-      {:no_commands, state} ->
-        {:noreply, state}
-    end
+        {:resend, command, state} ->
+          resend_command(state, command)
+      end
+
+    {:noreply, state}
   end
 
-  def handle_info({:connection_open, connection_server, _connection}, state)
+  def handle_info(
+        {:connection_data, _connection, data},
+        state
+      ) do
+    Logger.info("Not printer #{data}")
+
+    {:noreply, state}
+  end
+
+  def handle_info(
+        {
+          :connection_open,
+          connection_server,
+          _connection
+        },
+        state
+      )
       when is_connecting(state) do
     state = connected(state, connection_server)
 
@@ -142,25 +159,6 @@ defmodule Printer.Server do
     Logger.warn(
       "Got :connection_open_failed for #{inspect(connection.__struct__)} message but status was: #{state.status}"
     )
-
-    {:noreply, state}
-  end
-
-  def handle_info({:send_timeout, reference}, state) do
-    state =
-      with :retry <- check_timeout(state, reference),
-           {:ok, state} <- retry_send_command(state) do
-        state
-      else
-        :ignore ->
-          state
-
-        {:error, error} ->
-          Logger.error(error)
-          Logger.info("Closing connection due to retry failure.")
-
-          close_connection(state)
-      end
 
     {:noreply, state}
   end

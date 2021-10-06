@@ -14,6 +14,14 @@ defmodule Printer do
     ]
   ]
 
+  def test1 do
+    Printer.Connection.Virtual.new() |> connect()
+  end
+
+  def test2 do
+    start_print("priv/calicat.gcode")
+  end
+
   @doc """
   Sets the `Printer`'s current connection.
 
@@ -49,9 +57,13 @@ defmodule Printer do
     end
   end
 
+  def temp do
+    send("M105")
+  end
+
   def heat_hotend(temperature) do
     temperature
-    |> Gcode.m104()
+    |> Gcode.m109()
     |> send()
   end
 
@@ -89,5 +101,9 @@ defmodule Printer do
     with {:ok, _info} <- File.stat(path) do
       GenServer.call(PrinterServer, {:print_start, path})
     end
+  end
+
+  def stop_print do
+    GenServer.call(PrinterServer, :print_stop)
   end
 end

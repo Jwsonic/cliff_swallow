@@ -15,12 +15,12 @@ defmodule Printer.Server.ResponseParserTest do
 
     test "parses a temp" do
       assert ResponseParser.parse("T:540.14") ==
-               {:temperature, %{extruder_temperature: 540.14}}
+               {:extruder_temperature, 540.14}
     end
 
     test "parses an ok temp" do
       assert ResponseParser.parse("ok T:75.30/ 0.00 B:21.30/ 0.00 @:64") ==
-               {:temperature,
+               {:ok,
                 %{
                   extruder_temperature: 75.3,
                   bed_temperature: 21.3
@@ -28,8 +28,11 @@ defmodule Printer.Server.ResponseParserTest do
     end
 
     test "parses resend" do
-      assert ResponseParser.parse("Resend 100") ==
+      assert ResponseParser.parse("Resend:100") ==
                {:resend, 100}
+
+      assert ResponseParser.parse("Resend: 200") ==
+               {:resend, 200}
     end
 
     test "parses errors" do
