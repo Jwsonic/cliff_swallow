@@ -30,7 +30,7 @@ defmodule Printer.Connection.Virtual do
                python_path: python_path,
                python: python
              ),
-           :ok <- :python.call(pid, :virtual, :start_read, [self()]) do
+           :ok <- :python.call(pid, :virtual, :start, [self()]) do
         Process.monitor(pid)
 
         {:ok, %Virtual{pid: pid}}

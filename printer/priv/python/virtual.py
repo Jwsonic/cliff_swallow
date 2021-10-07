@@ -1,5 +1,5 @@
 from erlport.erlterms import Atom
-from erlport.erlang import cast
+from erlport.erlang import cast, call
 
 from octoprint.plugin import plugin_manager
 from octoprint.plugins.virtual_printer import VirtualPrinterPlugin
@@ -66,8 +66,10 @@ printer = VirtualPrinter(settings, '.')
 VIRTUAL_PRINTER = Atom(b'virtual_printer')
 OK = Atom(b'ok')
 
+# TODO: re-add kill
 
-def start_read(pid):
+
+def start(pid):
     def read_forever():
         while True:
             line = printer.readline()
@@ -75,8 +77,21 @@ def start_read(pid):
             if line and line != b'wait':
                 cast(pid, (VIRTUAL_PRINTER, bytes(line)))
 
+    def wait_until_parent_exits():
+        # Our parent is whatever Elixir process that spawned us
+        parent = os.getppid()
+
+        while parent != 1 and psutil.pid_exists(parent):
+            pass
+
+        # sys.exit doesn't seem to work properly, so we go for the kill
+        os.kill(os.getpid(), signal.SIGKILL)
+
     read_thread = Thread(target=read_forever)
     read_thread.start()
+
+    wait_thread = Thread(target=wait_until_parent_exits)
+    wait_thread.start()
 
     return OK
 
