@@ -130,23 +130,25 @@ defmodule PrinterTest do
 
         assert Printer.extrude(amount) == :ok
 
-        assert InMemory.last_message(connection) ==
-                 {:send, Gcode.g1(%{"E" => amount})}
+        {:send, last_command} = InMemory.last_message(connection)
+
+        assert String.contains?(last_command, Gcode.g1(%{"E" => amount}))
       end
     end
   end
 
-  describe "Printer.heat_hotend/1" do
+  describe "Printer.heat_extruder/1" do
     property "it sends a M104 command",
              %{
                connection: connection
              } = context do
       check all amount <- positive_integer() do
         reset_printer(context)
-        assert Printer.heat_hotend(amount) == :ok
+        assert Printer.heat_extruder(amount) == :ok
 
-        assert InMemory.last_message(connection) ==
-                 {:send, Gcode.m104(amount)}
+        {:send, last_command} = InMemory.last_message(connection)
+
+        assert String.contains?(last_command, Gcode.m109(amount))
       end
     end
   end
@@ -160,8 +162,9 @@ defmodule PrinterTest do
         reset_printer(context)
         assert Printer.heat_bed(amount) == :ok
 
-        assert InMemory.last_message(connection) ==
-                 {:send, Gcode.m140(amount)}
+        {:send, last_command} = InMemory.last_message(connection)
+
+        assert String.contains?(last_command, Gcode.m140(amount))
       end
     end
   end
@@ -176,8 +179,9 @@ defmodule PrinterTest do
 
         assert Printer.start_temperature_report(interval) == :ok
 
-        assert InMemory.last_message(connection) ==
-                 {:send, Gcode.m155(interval)}
+        {:send, last_message} = InMemory.last_message(connection)
+
+        assert String.contains?(last_message, Gcode.m155(interval))
       end
     end
   end
@@ -188,8 +192,9 @@ defmodule PrinterTest do
     } do
       assert Printer.stop_temperature_report() == :ok
 
-      assert InMemory.last_message(connection) ==
-               {:send, Gcode.m155(0)}
+      {:send, last_command} = InMemory.last_message(connection)
+
+      assert String.contains?(last_command, Gcode.m155(0))
     end
   end
 
@@ -213,7 +218,9 @@ defmodule PrinterTest do
 
         assert Printer.home(axes) == :ok
 
-        assert InMemory.last_message(connection) == {:send, Gcode.g28(axes)}
+        {:send, received_command} = InMemory.last_message(connection)
+
+        assert String.contains?(received_command, Gcode.g28(axes))
       end
     end
   end
@@ -231,12 +238,10 @@ defmodule PrinterTest do
 
         assert Printer.move(axes) == :ok
 
-        assert InMemory.last_message(connection) == {:send, Gcode.g0(axes)}
-      end
-    end
+        {:send, last_command} = InMemory.last_message(connection)
 
-    test "you can't pass an empty list" do
-      assert Printer.move(%{}) == {:error, "You must provide at least one axis of movement"}
+        assert String.contains?(last_command, Gcode.g0(axes))
+      end
     end
   end
 end

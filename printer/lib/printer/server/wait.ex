@@ -15,13 +15,23 @@ defmodule Printer.Server.Wait do
     Map.put(wait, command.line_number, command)
   end
 
+  defp smallest_key(wait) do
+    wait
+    |> Map.keys()
+    |> Enum.sort()
+    |> List.first()
+  end
+
+  @spec peek(wait :: t()) :: Command.t() | :empty
+  def peek(wait) do
+    peek_key = smallest_key(wait)
+
+    Map.get(wait, peek_key, :empty)
+  end
+
   @spec pop(wait :: t()) :: wait :: t()
   def pop(wait) do
-    to_delete =
-      wait
-      |> Map.keys()
-      |> Enum.sort()
-      |> List.first()
+    to_delete = smallest_key(wait)
 
     Map.delete(wait, to_delete)
   end

@@ -53,6 +53,12 @@ defmodule Printer.Server do
     {:reply, :ok, state}
   end
 
+  def handle_call({:set_line_number, line_number}, _from, state) do
+    {reply, state} = set_line_number(state, line_number)
+
+    {:reply, reply, state}
+  end
+
   @impl GenServer
   def handle_call({:print_start, path}, _from, state) do
     case start_print(state, path) do
@@ -71,17 +77,20 @@ defmodule Printer.Server do
 
   @impl GenServer
   def handle_call({:send, command}, _from, state) do
-    with :ok <- send_precheck(state, command) |> IO.inspect(label: :precheck) do
-      {reply, state} = send_command(state, command)
-      {:reply, reply, state}
-    else
-      :wating ->
-        state = add_to_send_queue(state, command)
-        {:reply, :ok, state}
+    {reply, state} =
+      with :ok <- send_precheck(state, command) do
+        send_command(state, command)
+      else
+        :wating ->
+          state = add_to_send_queue(state, command)
 
-      reply ->
-        {:reply, reply, state}
-    end
+          {:ok, state}
+
+        reply ->
+          {reply, state}
+      end
+
+    {:reply, reply, state}
   end
 
   @impl GenServer
@@ -159,6 +168,20 @@ defmodule Printer.Server do
     Logger.warn(
       "Got :connection_open_failed for #{inspect(connection.__struct__)} message but status was: #{state.status}"
     )
+
+    {:noreply, state}
+  end
+
+  def handle_info({:timeout, timeout_reference, command}, state) do
+    state =
+      case check_timeout(state, timeout_reference) do
+        :ignore ->
+          state
+
+        :retry ->
+          Logger.info("Timeout for #{to_string(command)}")
+          resend_command(state, command)
+      end
 
     {:noreply, state}
   end

@@ -50,6 +50,11 @@ defmodule Printer.Gcode do
   def m104(temperature), do: "M104 S#{temperature}"
 
   @doc """
+  Returns the [report temperature](https://marlinfw.org/docs/gcode/M105.html) command.
+  """
+  def m105, do: "M105"
+
+  @doc """
   Builds a [wait for hotend](https://marlinfw.org/docs/gcode/M109.html) command.
   """
   def m109(temperature), do: "M109 S#{temperature}"

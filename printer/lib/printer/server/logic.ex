@@ -1,6 +1,8 @@
 defmodule Printer.Server.Logic do
   @moduledoc """
   Business logic functions/gaurds/macros to help make the server a bit more readable.
+
+  This could(should?) probably be broken down more in the future.
   """
 
   alias Printer.Connection
@@ -151,19 +153,42 @@ defmodule Printer.Server.Logic do
           line_number: line_number,
           wait: wait
         } = state,
-        command
+        command,
+        opts \\ []
       ) do
     command = Command.new(command, line_number)
     wait = Wait.add(wait, command)
-    command_to_send = to_string(command)
+
+    command_to_send =
+      case Keyword.get(opts, :raw, false) do
+        true ->
+          Logger.info("Overriding command checksum")
+          command.command
+
+        _ ->
+          to_string(command)
+      end
 
     Logger.info("Sending: #{command_to_send}")
 
     reply = Connection.send(connection_server, command_to_send)
 
+    timeout_reference = make_ref()
+
+    Process.send_after(
+      self(),
+      {
+        :timeout,
+        timeout_reference,
+        command
+      },
+      1_000
+    )
+
     state = %{
       state
-      | line_number: line_number + 1,
+      | timeout_reference: timeout_reference,
+        line_number: line_number + 1,
         wait: wait
     }
 
@@ -176,26 +201,6 @@ defmodule Printer.Server.Logic do
       state
       | send_queue: :queue.in(command, send_queue)
     }
-  end
-
-  @max_retry_count 10
-
-  @spec retry_send_command(state :: State.t()) :: {:ok, State.t()} | {:error, String.t()}
-  def retry_send_command(%State{} = state) do
-    retry_count = state.retry_count + 1
-    command = state.wait.command
-
-    case retry_count > @max_retry_count do
-      true ->
-        {:error, "Over max retry count for #{command}"}
-
-      false ->
-        {_reply, state} = send_command(state, command)
-
-        state = %{state | retry_count: retry_count}
-
-        {:ok, state}
-    end
   end
 
   @spec next_command(state :: State.t()) ::
@@ -242,21 +247,33 @@ defmodule Printer.Server.Logic do
     end
   end
 
+  @max_retry_count 5
+
   @spec resend_command(state :: State.t(), command :: Command.t()) :: State.t()
-  def resend_command(%State{} = state, %Command{} = command) do
-    wait = Wait.add(state.wait, command)
+  def resend_command(
+        %State{
+          retry_count: retry_count
+        } = state,
+        %Command{} = command
+      ) do
+    case retry_count > @max_retry_count do
+      true ->
+        Logger.error("Over max retry count. Closing the connection.")
 
-    Logger.info("Wait #{inspect(wait)}")
+        close_connection(state)
 
-    command_to_send = to_string(command)
+      false ->
+        to_resend = to_string(command)
 
-    Logger.info("Re-Sending: |#{command_to_send}|")
+        Logger.info("Re-Sending: |#{to_resend}|")
 
-    result = Connection.send(state.connection_server, command_to_send)
+        {_reply, state} = send_command(state, to_resend, raw: true)
 
-    Logger.info("Send result: #{inspect(result)}")
-
-    %{state | wait: wait}
+        %{
+          state
+          | retry_count: retry_count + 1
+        }
+    end
   end
 
   @spec start_print(state :: State.t(), path :: Path.t()) ::
@@ -298,8 +315,6 @@ defmodule Printer.Server.Logic do
         } = state,
         response
       ) do
-    Logger.info("Raw response: #{response}")
-
     parsed_response = ResponseParser.parse(response)
 
     state = %{state | previous_response: parsed_response}
@@ -317,13 +332,23 @@ defmodule Printer.Server.Logic do
         end
 
       {:ok, _} ->
-        state = %{state | wait: Wait.pop(wait)}
+        state = %{
+          state
+          | retry_count: 0,
+            timeout_reference: nil,
+            wait: Wait.pop(wait)
+        }
 
         {:send_next, state}
 
       {{:ok, _temperature_data}, _} ->
         # TODO: temp updates
-        state = %{state | wait: Wait.pop(wait)}
+        state = %{
+          state
+          | retry_count: 0,
+            timeout_reference: nil,
+            wait: Wait.pop(wait)
+        }
 
         {:send_next, state}
 
@@ -340,4 +365,31 @@ defmodule Printer.Server.Logic do
         {:ignore, state}
     end
   end
+
+  @spec set_line_number(
+          state :: State.t(),
+          line_number :: pos_integer()
+        ) :: State.t()
+  def set_line_number(state, line_number) do
+    new_state = %{state | line_number: line_number}
+
+    case send_command(new_state, "M110") do
+      {:ok, state} ->
+        {:ok, state}
+
+      result ->
+        result
+    end
+  end
+
+  def check_timeout(
+        %State{
+          timeout_reference: timeout_reference
+        },
+        timeout_reference
+      ) do
+    :retry
+  end
+
+  def check_timeout(_state, _timeout_reference), do: :ignore
 end
