@@ -49,9 +49,13 @@ defmodule Printer do
     end
   end
 
-  def heat_hotend(temperature) do
+  def get_temperature do
+    Gcode.m105() |> send()
+  end
+
+  def heat_extruder(temperature) do
     temperature
-    |> Gcode.m104()
+    |> Gcode.m109()
     |> send()
   end
 
@@ -89,5 +93,13 @@ defmodule Printer do
     with {:ok, _info} <- File.stat(path) do
       GenServer.call(PrinterServer, {:print_start, path})
     end
+  end
+
+  def set_line_number(line_number) do
+    GenServer.call(PrinterServer, {:set_line_number, line_number})
+  end
+
+  def stop_print do
+    GenServer.call(PrinterServer, :print_stop)
   end
 end

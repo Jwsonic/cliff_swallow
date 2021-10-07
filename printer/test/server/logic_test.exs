@@ -4,7 +4,7 @@ defmodule Printer.Server.LogicTest do
 
   alias Printer.Connection
   alias Printer.Connection.InMemory
-  alias Printer.Server.{Logic, State, Wait}
+  alias Printer.Server.{Command, Logic, PrintJob, State}
 
   setup do
     {:ok, connection} = InMemory.start_link()
@@ -12,9 +12,11 @@ defmodule Printer.Server.LogicTest do
 
     state = %State{
       connection_server: connection_server,
+      line_number: 1,
       retry_count: 0,
       send_queue: :queue.new(),
-      status: :connected
+      status: :connected,
+      wait: %{}
     }
 
     {:ok, %{connection: connection, state: state}}
@@ -74,65 +76,50 @@ defmodule Printer.Server.LogicTest do
     end
   end
 
-  describe "send_command/2" do
-    property "calls Connection.send/2", %{connection: connection, state: state} do
-      check all command <- binary() do
-        Logic.send_command(state, command)
+  describe "send_precheck/2" do
+    property "only estop is ok during a print job", %{state: state} do
+      state = %{state | status: :printing, print_job: %PrintJob{}}
 
-        assert InMemory.last_message(connection) == {:send, command}
+      assert Logic.send_precheck(state, "M112") == :ok
+
+      check all command <- binary(),
+                command != "M112" do
+        assert Logic.send_precheck(state, command) == {:error, "Print job in progress"}
       end
     end
 
-    property "updates the state", %{state: state} do
+    property "anything is ok when connected", %{state: state} do
       check all command <- binary() do
-        {:ok,
-         %{
-           timeout_reference: timeout_reference,
-           wait: %Wait{}
-         }} = Logic.send_command(state, command)
-
-        assert is_reference(timeout_reference)
+        assert Logic.send_precheck(state, command) == :ok
       end
+    end
+
+    property "nothing is ok when disconnected", %{state: state} do
+      state = %{state | status: :disconnected}
+
+      check all command <- binary() do
+        assert Logic.send_precheck(state, command) == {:error, "Not connected"}
+      end
+    end
+  end
+
+  describe "send_command/2" do
+    test "calls Connection.send/2", %{connection: connection, state: state} do
+      Logic.send_command(state, "G0 X10")
+
+      assert InMemory.last_message(connection) == {:send, "N1 G0 X10 *113\n"}
     end
 
     test "schedules a timeout", %{connection: connection, state: state} do
       {_reply,
        %{
          timeout_reference: timeout_reference,
-         wait: %{timeout: timeout}
+         wait: %{}
        }} = Logic.send_command(state, "G0")
 
-      assert InMemory.last_message(connection) == {:send, "G0"}
+      assert InMemory.last_message(connection) == {:send, "N1 G0 *8\n"}
 
-      assert_receive {:send_timeout, ^timeout_reference}, timeout + 100
-    end
-  end
-
-  describe "check_wait/2" do
-    test "it returns :done when the response matches", %{state: state} do
-      state = %{state | timeout_reference: make_ref(), wait: Wait.build("G0 X1")}
-
-      assert Logic.check_wait(state, "ok") ==
-               {:done, %{state | timeout_reference: nil, wait: nil}}
-    end
-
-    property "it returns :wait with new state when we need to wait longer", %{state: state} do
-      state = %{state | wait: Wait.build("G0 X1")}
-
-      check all response <- binary(),
-                response != "ok" do
-        {:wait, %State{}} = assert Logic.check_wait(state, response)
-      end
-    end
-
-    test "it handles multiple response commands", %{state: state} do
-      state = %{state | wait: Wait.build("M109 ")}
-
-      {:wait, %State{} = state} = Logic.check_wait(state, "ok")
-
-      {:wait, %State{} = state} = Logic.check_wait(state, "T: ")
-
-      assert {:done, %State{}} = Logic.check_wait(state, "ok")
+      assert_receive {:timeout, ^timeout_reference, %Command{}}, 2_000
     end
   end
 
@@ -142,43 +129,24 @@ defmodule Printer.Server.LogicTest do
       assert Logic.check_timeout(state, make_ref()) == :ignore
     end
 
-    test "it returns :retry when the command should be sent again",
-         %{state: state} do
-      timeout_reference = make_ref()
+    # test "it returns :retry when the command should be sent again",
+    #      %{state: state} do
+    #   timeout_reference = make_ref()
 
-      state = %{
-        state
-        | timeout_reference: timeout_reference,
-          wait: %Wait{}
-      }
+    #   state = %{
+    #     state
+    #     | timeout_reference: timeout_reference,
+    #       wait: %Wait{}
+    #   }
 
-      assert Logic.check_timeout(state, timeout_reference) ==
-               :retry
-    end
-  end
-
-  describe "retry_send_command/1" do
-    test "sends the command again", %{state: state} do
-      {_reply, state} = Logic.send_command(state, "G0")
-
-      retry_count = state.retry_count + 1
-
-      assert {:ok, %{retry_count: ^retry_count}} = Logic.retry_send_command(state)
-    end
-
-    test "returns an error when we're over the retry limit", %{state: state} do
-      {_reply, state} = Logic.send_command(state, "G0")
-
-      state = %{state | retry_count: 5}
-
-      assert Logic.retry_send_command(state) ==
-               {:error, "Over max retry count for G0"}
-    end
+    #   assert Logic.check_timeout(state, timeout_reference) ==
+    #            :retry
+    # end
   end
 
   describe "next_command/1" do
     test "returns :no_commands and clears the timeout reference", %{state: state} do
-      assert {:no_commands, state} == Logic.next_command(state)
+      assert :no_commands == Logic.next_command(state)
     end
 
     property "returns updated state and command when there are messages", %{state: state} do
@@ -187,6 +155,22 @@ defmodule Printer.Server.LogicTest do
 
         assert Logic.next_command(new_state) == {state, command}
       end
+    end
+
+    test "when printing, returns the next print job command", %{state: state} do
+      state = %{
+        state
+        | status: :printing,
+          print_job: %PrintJob{
+            pid: File.open!("priv/calicat.gcode"),
+            path: "priv/calicat.gcode",
+            start_time: DateTime.utc_now()
+          }
+      }
+
+      assert Logic.next_command(state) == {state, "M140 S60"}
+      assert Logic.next_command(state) == {state, "M105"}
+      assert Logic.next_command(state) == {state, "M190 S60"}
     end
   end
 

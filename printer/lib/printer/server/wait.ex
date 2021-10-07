@@ -3,66 +3,45 @@ defmodule Printer.Server.Wait do
   Logic around which commands a printer should wait for, and how long.
   """
 
-  defstruct [
-    :command,
-    :context,
-    :reference,
-    :response_matcher,
-    :timeout
-  ]
+  alias Printer.Server.Command
 
-  alias __MODULE__
+  @type t() :: %{pos_integer() => Command.t()}
 
-  @type t() :: %Wait{}
+  @spec new() :: t()
+  def new, do: %{}
 
-  defp ok_response_matcher(_context, "ok"), do: :done
-  defp ok_response_matcher(context, _response), do: {:wait, context}
-
-  defp m109_response_matcher(nil, "ok") do
-    {:wait, false}
+  @spec add(wait :: t(), command :: Command.t()) :: t()
+  def add(wait, %Command{} = command) do
+    Map.put(wait, command.line_number, command)
   end
 
-  defp m109_response_matcher(false, "T:" <> _rest) do
-    {:wait, true}
+  defp smallest_key(wait) do
+    wait
+    |> Map.keys()
+    |> Enum.sort()
+    |> List.first()
   end
 
-  defp m109_response_matcher(true, "ok") do
-    :done
+  @spec peek(wait :: t()) :: Command.t() | :empty
+  def peek(wait) do
+    peek_key = smallest_key(wait)
+
+    Map.get(wait, peek_key, :empty)
   end
 
-  @spec build(command :: String.t()) :: t()
+  @spec pop(wait :: t()) :: wait :: t()
+  def pop(wait) do
+    to_delete = smallest_key(wait)
 
-  def build("M109" <> _rest = command) do
-    %Wait{
-      command: command,
-      context: nil,
-      response_matcher: &m109_response_matcher/2,
-      timeout: 1_000 * 60 * 5
-    }
+    Map.delete(wait, to_delete)
   end
 
-  def build(command) do
-    %Wait{
-      command: command,
-      context: nil,
-      response_matcher: &ok_response_matcher/2,
-      timeout: 500
-    }
-  end
-
-  @spec check(wait :: t(), response :: String.t()) :: {:wait, t()} | :done
-  def check(%Wait{context: context, response_matcher: response_matcher} = wait, response) do
-    with {:wait, context} <- apply(response_matcher, [context, response]) do
-      {:wait, %{wait | context: context}}
+  @spec pop(wait :: t(), line_number :: pos_integer()) ::
+          {Command.t(), wait :: t()} | :not_found
+  def pop(wait, line_number) do
+    case Map.pop(wait, line_number) do
+      {nil, ^wait} -> :not_found
+      result -> result
     end
-  end
-
-  @spec schedule_timeout(wait :: t()) :: reference()
-  def schedule_timeout(%Wait{timeout: timeout}) do
-    reference = make_ref()
-
-    Process.send_after(self(), {:send_timeout, reference}, timeout)
-
-    reference
   end
 end
