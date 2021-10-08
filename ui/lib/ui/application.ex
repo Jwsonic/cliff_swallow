@@ -5,8 +5,7 @@ defmodule Ui.Application do
 
   use Application
 
-  alias Ui.Printer.Supervisor, as: PrinterSupervisor
-
+  @impl true
   def start(_type, _args) do
     children = [
       # Start the Telemetry supervisor
@@ -14,8 +13,9 @@ defmodule Ui.Application do
       # Start the PubSub system
       {Phoenix.PubSub, name: Ui.PubSub},
       # Start the Endpoint (http/https)
-      UiWeb.Endpoint,
-      PrinterSupervisor
+      UiWeb.Endpoint
+      # Start a worker by calling: Ui.Worker.start_link(arg)
+      # {Ui.Worker, arg}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -26,6 +26,7 @@ defmodule Ui.Application do
 
   # Tell Phoenix to update the endpoint configuration
   # whenever the application is updated.
+  @impl true
   def config_change(changed, _new, removed) do
     UiWeb.Endpoint.config_change(changed, removed)
     :ok

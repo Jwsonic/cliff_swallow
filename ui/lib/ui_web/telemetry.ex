@@ -1,7 +1,4 @@
 defmodule UiWeb.Telemetry do
-  @moduledoc """
-  Wires up telemetry events for UiWeb
-  """
   use Supervisor
   import Telemetry.Metrics
 

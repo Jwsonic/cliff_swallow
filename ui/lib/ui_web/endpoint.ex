@@ -7,12 +7,8 @@ defmodule UiWeb.Endpoint do
   @session_options [
     store: :cookie,
     key: "_ui_key",
-    signing_salt: "Tkki6NTU"
+    signing_salt: "MnXCkGAu"
   ]
-
-  socket "/socket", UiWeb.UserSocket,
-    websocket: true,
-    longpoll: false
 
   socket "/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]]
 
@@ -24,7 +20,7 @@ defmodule UiWeb.Endpoint do
     at: "/",
     from: :ui,
     gzip: false,
-    only: ~w(assets css fonts images js favicon.ico robots.txt)
+    only: ~w(assets fonts images favicon.ico robots.txt)
 
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
