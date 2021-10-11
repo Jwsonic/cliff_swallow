@@ -71,6 +71,13 @@ defmodule Printer.Gcode do
 
   @doc """
   Builds a [temperature auto report](https://marlinfw.org/docs/gcode/M155.html) command.
+
+  `interval` - the seconds between each temperature report.
   """
   def m155(interval), do: "M155 S#{interval}"
+
+  @doc """
+  Builds a [wait for bed temperature](https://marlinfw.org/docs/gcode/M190.html) command.
+  """
+  def m190(temperature), do: "M190 S#{temperature}"
 end

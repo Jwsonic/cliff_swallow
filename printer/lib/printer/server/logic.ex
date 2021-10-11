@@ -5,7 +5,7 @@ defmodule Printer.Server.Logic do
   This could(should?) probably be broken down more in the future.
   """
 
-  alias Printer.{Connection, Status}
+  alias Printer.{Connection, Gcode, PubSub, Status}
   alias Printer.Server.{Command, PrintJob, ResponseParser, State, Wait}
 
   require Logger
@@ -40,12 +40,23 @@ defmodule Printer.Server.Logic do
       line_number: 1,
       previous_response: nil,
       print_job: nil,
+      public_status: %Status{
+        status: :disconnected
+      },
       retry_count: 0,
       send_queue: :queue.new(),
       status: :disconnected,
       timeout_reference: nil,
       wait: Wait.new()
     }
+  end
+
+  def reset(args \\ []) do
+    state = build_initial_state(args)
+
+    PubSub.broadcast(state.public_status)
+
+    state
   end
 
   # override? -> true means always connect and maybe disconnect too
@@ -91,10 +102,17 @@ defmodule Printer.Server.Logic do
 
   @spec connected(state :: State.t(), connection_server :: pid()) :: State.t()
   def connected(%State{} = state, connection_server) do
-    update_state(state, %{
-      connection_server: connection_server,
-      status: :connected
-    })
+    interval_command = Gcode.m155(5)
+
+    {_reply, state} =
+      state
+      |> update_state(%{
+        connection_server: connection_server,
+        status: :connected
+      })
+      |> send_command(interval_command)
+
+    state
   end
 
   @spec close_connection(state :: State.t()) :: State.t()
@@ -103,7 +121,7 @@ defmodule Printer.Server.Logic do
       Connection.close(connection_server)
     end
 
-    build_initial_state()
+    reset()
   end
 
   @spec send_precheck(state :: State.t(), command :: String.t()) ::
@@ -148,31 +166,67 @@ defmodule Printer.Server.Logic do
           {reply :: any(), state :: State.t()}
   def send_command(
         %State{
-          connection_server: connection_server,
-          line_number: line_number,
-          wait: wait
+          line_number: line_number
         } = state,
-        command,
-        opts \\ []
+        command
       ) do
     command = Command.new(command, line_number)
+
+    {reply, state} = do_send_command(state, command)
+
+    state =
+      update_state(state, %{
+        line_number: line_number + 1
+      })
+
+    {reply, state}
+  end
+
+  @max_retry_count 5
+
+  @spec resend_command(state :: State.t(), command :: Command.t()) :: State.t()
+  def resend_command(
+        %State{
+          retry_count: retry_count
+        } = state,
+        %Command{} = command
+      ) do
+    case retry_count > @max_retry_count do
+      true ->
+        Logger.error("Over max retry count. Closing the connection.")
+
+        close_connection(state)
+
+      false ->
+        to_resend = to_string(command)
+
+        Logger.info("Re-Sending: |#{to_resend}|")
+
+        {_reply, state} = do_send_command(state, command)
+
+        update_state(state, %{
+          retry_count: retry_count + 1
+        })
+    end
+  end
+
+  defp do_send_command(
+         %State{
+           connection_server: connection_server,
+           wait: wait
+         } = state,
+         %Command{} = command
+       ) do
     wait = Wait.add(wait, command)
-
-    command_to_send =
-      case Keyword.get(opts, :raw, false) do
-        true ->
-          Logger.info("Overriding command checksum")
-          command.command
-
-        _ ->
-          to_string(command)
-      end
+    command_to_send = to_string(command)
 
     Logger.info("Sending: #{command_to_send}")
 
     reply = Connection.send(connection_server, command_to_send)
 
     timeout_reference = make_ref()
+
+    timeout = Wait.timeout(command)
 
     Process.send_after(
       self(),
@@ -181,13 +235,12 @@ defmodule Printer.Server.Logic do
         timeout_reference,
         command
       },
-      1_000
+      timeout
     )
 
     state =
       update_state(state, %{
         timeout_reference: timeout_reference,
-        line_number: line_number + 1,
         wait: wait
       })
 
@@ -232,34 +285,6 @@ defmodule Printer.Server.Logic do
     end
   end
 
-  @max_retry_count 5
-
-  @spec resend_command(state :: State.t(), command :: Command.t()) :: State.t()
-  def resend_command(
-        %State{
-          retry_count: retry_count
-        } = state,
-        %Command{} = command
-      ) do
-    case retry_count > @max_retry_count do
-      true ->
-        Logger.error("Over max retry count. Closing the connection.")
-
-        close_connection(state)
-
-      false ->
-        to_resend = to_string(command)
-
-        Logger.info("Re-Sending: |#{to_resend}|")
-
-        {_reply, state} = send_command(state, to_resend, raw: true)
-
-        update_state(state, %{
-          retry_count: retry_count + 1
-        })
-    end
-  end
-
   @spec start_print(state :: State.t(), path :: Path.t()) ::
           {:ok, state :: State.t()} | {:error, reason :: String.t()}
   def start_print(state, _path) when is_printing(state) do
@@ -293,63 +318,95 @@ defmodule Printer.Server.Logic do
           | {:resend, command :: Command.t(), state :: State.t()}
           | {:ignore, state :: State.t()}
   def process_response(
-        %State{
-          previous_response: previous_response,
-          wait: wait
-        } = state,
+        %State{} = state,
         response
       ) do
     parsed_response = ResponseParser.parse(response)
+
+    {response, state} = do_process_response(state, parsed_response)
 
     state =
       update_state(state, %{
         previous_response: parsed_response
       })
 
-    case {parsed_response, previous_response} do
-      {:ok, {:resend, line_number}} ->
-        case Wait.pop(wait, line_number) do
-          :not_found ->
-            {:ignore, state}
+    {response, state}
+  end
 
-          {command, wait} ->
-            state = update_state(state, %{wait: wait})
-
-            {:resend, command, state}
-        end
-
-      {:ok, _} ->
-        update_state(state, %{
-          retry_count: 0,
-          timeout_reference: nil,
-          wait: Wait.pop(wait)
-        })
-
-        {:send_next, state}
-
-      {{:ok, temperature_data}, _} ->
-        state =
-          update_state(state, %{
-            temperature_data
-            | retry_count: 0,
-              timeout_reference: nil,
-              wait: Wait.pop(wait)
-          })
-
-        {:send_next, state}
-
-      {{:busy, reason}, _} ->
-        Logger.warn("Printer busy: #{reason}")
+  # We just got the "ok" portion of a resend response. So we'll re-send the requested line
+  defp do_process_response(
+         %State{
+           previous_response: {:resend, line_number},
+           wait: wait
+         } = state,
+         :ok
+       ) do
+    case Wait.remove(wait, line_number) do
+      :not_found ->
         {:ignore, state}
 
-      {{:parse_error, _reason}, _} ->
-        Logger.error("Unable to parse response: #{response}")
-
-        {:ignore, state}
-
-      _other ->
-        {:ignore, state}
+      {command, wait} ->
+        state = update_state(state, %{wait: wait})
+        {:resend, command, state}
     end
+  end
+
+  # It looks like we're halfway through a resend request,
+  # wait for the next part
+  defp do_process_response(
+         %State{} = state,
+         {:resend, _line_number}
+       ) do
+    {:ignore, state}
+  end
+
+  # We've got a non-retry "ok" response.
+  # Clear the retry values and send the next command
+  defp do_process_response(
+         %State{wait: wait} = state,
+         :ok
+       ) do
+    wait = Wait.remove_lowest(wait)
+
+    state =
+      update_state(state, %{
+        retry_count: 0,
+        timeout_reference: nil,
+        wait: wait
+      })
+
+    {:send_next, state}
+  end
+
+  # We've been sent some temperature data so update the state only
+  defp do_process_response(
+         %State{} = state,
+         {:ok, temperature_data}
+       ) do
+    state = update_state(state, temperature_data)
+
+    {:ignore, state}
+  end
+
+  defp do_process_response(
+         %State{} = state,
+         {:busy, reason}
+       ) do
+    Logger.warn("Printer busy: #{reason}")
+    {:ignore, state}
+  end
+
+  defp do_process_response(
+         %State{} = state,
+         {:parse_error, reason}
+       ) do
+    Logger.warn("Parse error: #{reason}")
+
+    {:ignore, state}
+  end
+
+  defp do_process_response(%State{} = state, _other) do
+    {:ignore, state}
   end
 
   @spec set_line_number(
@@ -402,7 +459,7 @@ defmodule Printer.Server.Logic do
     public_status = Status.update(old_public_status, changes)
 
     if old_public_status != public_status do
-      Printer.PubSub.broadcast(public_status)
+      PubSub.broadcast(public_status)
     end
 
     changes = Map.take(changes, @keys)

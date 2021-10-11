@@ -42,10 +42,16 @@ defmodule Printer.Server.ResponseParser do
     |> concat(float)
     |> unwrap_and_tag(:bed_temperature)
 
-  ok_temperature =
-    ignore(string("ok "))
+  target_temp =
+    string("/ ")
+    |> concat(float)
+    |> string(" ")
+
+  full_temperature =
+    ignore(optional(string("ok ")))
     |> concat(extruder_temperature)
-    |> eventually(bed_temperature)
+    |> ignore(target_temp)
+    |> concat(bed_temperature)
 
   error =
     ignore(string("Error:"))
@@ -76,14 +82,19 @@ defmodule Printer.Server.ResponseParser do
     choice([
       ok,
       start,
+      full_temperature,
       extruder_temperature,
       bed_temperature,
-      ok_temperature,
       resend,
       error,
       busy
     ])
   )
+
+  @temperature_tags [
+    :bed_temperature,
+    :extruder_temperature
+  ]
 
   @spec parse(data :: String.t()) ::
           :ok
@@ -91,17 +102,25 @@ defmodule Printer.Server.ResponseParser do
           | {:resend, line :: pos_integer()}
           | {:error, error :: String.t()}
           | {:busy, reason :: String.t()}
-          | {:extruder_temperature, temperature :: float()}
-          | {:bed_temperature, temperature :: float()}
           | {:ok, temperature_data :: map()}
           | {:parse_error, error :: String.t()}
   def parse(data) do
     case do_parse(data) do
-      {:ok, ["ok"], _, _, _, _} -> :ok
-      {:ok, ["start"], _, _, _, _} -> :start
-      {:ok, [{_tag, _data} = tagged_tuple], _, _, _, _} -> tagged_tuple
-      {:ok, data, _, _, _, _} -> {:ok, Map.new(data)}
-      {:error, error, _, _, _, _} -> {:parse_error, error}
+      {:ok, ["ok"], _, _, _, _} ->
+        :ok
+
+      {:ok, ["start"], _, _, _, _} ->
+        :start
+
+      {:ok, [{tag, _data} = tagged_tuple], _, _, _, _}
+      when tag not in @temperature_tags ->
+        tagged_tuple
+
+      {:ok, data, _, _, _, _} ->
+        {:ok, Map.new(data)}
+
+      {:error, error, _, _, _, _} ->
+        {:parse_error, error}
     end
   end
 end

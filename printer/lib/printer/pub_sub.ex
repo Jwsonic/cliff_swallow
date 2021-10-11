@@ -19,4 +19,8 @@ defmodule Printer.PubSub do
   def subscribe do
     PubSub.subscribe(__MODULE__, @printer_topic)
   end
+
+  def unsubscribe do
+    PubSub.unsubscribe(__MODULE__, @printer_topic)
+  end
 end

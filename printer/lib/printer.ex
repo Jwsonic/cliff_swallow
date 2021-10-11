@@ -32,6 +32,14 @@ defmodule Printer do
     GenServer.call(PrinterServer, :status)
   end
 
+  def subscribe do
+    Printer.PubSub.subscribe()
+  end
+
+  def unsubscribe do
+    Printer.PubSub.unsubscribe()
+  end
+
   def disconnect do
     GenServer.call(PrinterServer, :disconnect)
   end
@@ -65,7 +73,7 @@ defmodule Printer do
 
   def heat_bed(temperature) do
     temperature
-    |> Gcode.m140()
+    |> Gcode.m190()
     |> send()
   end
 

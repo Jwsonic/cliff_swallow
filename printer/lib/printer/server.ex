@@ -19,7 +19,9 @@ defmodule Printer.Server do
 
   @impl GenServer
   def handle_call({:reset, args}, _from, _state) do
-    {:reply, :ok, build_initial_state(args)}
+    state = reset(args)
+
+    {:reply, :ok, state}
   end
 
   @impl GenServer
