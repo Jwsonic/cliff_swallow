@@ -9,6 +9,7 @@ defmodule Printer.Server.State do
     :send_queue,
     :line_number,
     :previous_response,
+    :public_status,
     :status,
     :timeout_reference,
     :wait

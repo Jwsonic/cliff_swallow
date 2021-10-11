@@ -23,6 +23,11 @@ defmodule Printer.Server do
   end
 
   @impl GenServer
+  def handle_call(:status, _from, state) do
+    {:reply, {:ok, state.public_status}, state}
+  end
+
+  @impl GenServer
   def handle_call({:connect, connection, override?}, _from, state) do
     with :ok <- connect_precheck(state, override?),
          {:ok, state} <- open_connection(state, connection) do

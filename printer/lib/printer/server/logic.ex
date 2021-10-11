@@ -5,7 +5,7 @@ defmodule Printer.Server.Logic do
   This could(should?) probably be broken down more in the future.
   """
 
-  alias Printer.Connection
+  alias Printer.{Connection, Status}
   alias Printer.Server.{Command, PrintJob, ResponseParser, State, Wait}
 
   require Logger
@@ -70,20 +70,20 @@ defmodule Printer.Server.Logic do
   def open_connection(%State{} = state, connection) do
     case Connection.open(connection) do
       {:ok, _connection} ->
-        state = %{
-          state
-          | connection_server: nil,
+        state =
+          update_state(state, %{
+            connection_server: nil,
             status: :connecting
-        }
+          })
 
         {:ok, state}
 
       {:error, reason} ->
-        state = %{
-          state
-          | connection_server: nil,
+        state =
+          update_state(state, %{
+            connection_server: nil,
             status: :disconnected
-        }
+          })
 
         {:error, reason, state}
     end
@@ -91,11 +91,10 @@ defmodule Printer.Server.Logic do
 
   @spec connected(state :: State.t(), connection_server :: pid()) :: State.t()
   def connected(%State{} = state, connection_server) do
-    %{
-      state
-      | connection_server: connection_server,
-        status: :connected
-    }
+    update_state(state, %{
+      connection_server: connection_server,
+      status: :connected
+    })
   end
 
   @spec close_connection(state :: State.t()) :: State.t()
@@ -136,7 +135,7 @@ defmodule Printer.Server.Logic do
   def reset_line_number(state) when is_connected(state) do
     case Connection.send(state.connection_server, "M110 N1") do
       :ok ->
-        state = %{state | line_number: 1, wait: Wait.new()}
+        state = update_state(state, %{line_number: 1, wait: Wait.new()})
 
         {:ok, state}
 
@@ -185,39 +184,21 @@ defmodule Printer.Server.Logic do
       1_000
     )
 
-    state = %{
-      state
-      | timeout_reference: timeout_reference,
+    state =
+      update_state(state, %{
+        timeout_reference: timeout_reference,
         line_number: line_number + 1,
         wait: wait
-    }
+      })
 
     {reply, state}
   end
 
   @spec add_to_send_queue(state :: State.t(), command :: String.t()) :: State.t()
   def add_to_send_queue(%State{send_queue: send_queue} = state, command) do
-    %{
-      state
-      | send_queue: :queue.in(command, send_queue)
-    }
-  end
-
-  @spec next_command(state :: State.t()) ::
-          {:no_commands, state :: :State.t()}
-          | {state :: State.t(), command :: String.t()}
-  def next_command(%State{} = state) when is_printing(state) do
-    case PrintJob.next_command(state.print_job) do
-      {:ok, command} -> {state, command}
-      :done -> {%{state | status: :connected, print_job: nil}}
-    end
-  end
-
-  def next_command(%State{send_queue: send_queue} = state) do
-    case :queue.out(send_queue) do
-      {:empty, _send_queue} -> :no_commands
-      {{:value, command}, send_queue} -> {%{state | send_queue: send_queue}, command}
-    end
+    update_state(state, %{
+      send_queue: :queue.in(command, send_queue)
+    })
   end
 
   @spec send_next(state :: State.t()) :: State.t()
@@ -229,7 +210,10 @@ defmodule Printer.Server.Logic do
         state
 
       :done ->
-        %{state | status: :connected, print_job: nil}
+        update_state(state, %{
+          status: :connected,
+          print_job: nil
+        })
     end
   end
 
@@ -240,7 +224,8 @@ defmodule Printer.Server.Logic do
 
       {{:value, command}, send_queue} ->
         {_reply, state} =
-          %{state | send_queue: send_queue}
+          state
+          |> update_state(%{send_queue: send_queue})
           |> send_command(command)
 
         state
@@ -269,10 +254,9 @@ defmodule Printer.Server.Logic do
 
         {_reply, state} = send_command(state, to_resend, raw: true)
 
-        %{
-          state
-          | retry_count: retry_count + 1
-        }
+        update_state(state, %{
+          retry_count: retry_count + 1
+        })
     end
   end
 
@@ -317,7 +301,10 @@ defmodule Printer.Server.Logic do
       ) do
     parsed_response = ResponseParser.parse(response)
 
-    state = %{state | previous_response: parsed_response}
+    state =
+      update_state(state, %{
+        previous_response: parsed_response
+      })
 
     case {parsed_response, previous_response} do
       {:ok, {:resend, line_number}} ->
@@ -326,29 +313,28 @@ defmodule Printer.Server.Logic do
             {:ignore, state}
 
           {command, wait} ->
-            state = %{state | wait: wait}
+            state = update_state(state, %{wait: wait})
 
             {:resend, command, state}
         end
 
       {:ok, _} ->
-        state = %{
-          state
-          | retry_count: 0,
-            timeout_reference: nil,
-            wait: Wait.pop(wait)
-        }
+        update_state(state, %{
+          retry_count: 0,
+          timeout_reference: nil,
+          wait: Wait.pop(wait)
+        })
 
         {:send_next, state}
 
-      {{:ok, _temperature_data}, _} ->
-        # TODO: temp updates
-        state = %{
-          state
-          | retry_count: 0,
-            timeout_reference: nil,
-            wait: Wait.pop(wait)
-        }
+      {{:ok, temperature_data}, _} ->
+        state =
+          update_state(state, %{
+            temperature_data
+            | retry_count: 0,
+              timeout_reference: nil,
+              wait: Wait.pop(wait)
+          })
 
         {:send_next, state}
 
@@ -371,7 +357,7 @@ defmodule Printer.Server.Logic do
           line_number :: pos_integer()
         ) :: State.t()
   def set_line_number(state, line_number) do
-    new_state = %{state | line_number: line_number}
+    new_state = update_state(state, %{line_number: line_number})
 
     case send_command(new_state, "M110") do
       {:ok, state} ->
@@ -392,4 +378,37 @@ defmodule Printer.Server.Logic do
   end
 
   def check_timeout(_state, _timeout_reference), do: :ignore
+
+  @keys [
+    :connection_server,
+    :print_job,
+    :retry_count,
+    :send_queue,
+    :line_number,
+    :previous_response,
+    :public_status,
+    :status,
+    :timeout_reference,
+    :wait
+  ]
+
+  # Find a better way to broadcast changes
+  def update_state(
+        %State{
+          public_status: old_public_status
+        } = state,
+        changes
+      ) do
+    public_status = Status.update(old_public_status, changes)
+
+    if old_public_status != public_status do
+      Printer.PubSub.broadcast(public_status)
+    end
+
+    changes = Map.take(changes, @keys)
+
+    state
+    |> Map.merge(changes)
+    |> Map.put(:public_status, public_status)
+  end
 end

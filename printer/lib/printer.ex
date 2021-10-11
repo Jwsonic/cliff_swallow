@@ -28,6 +28,10 @@ defmodule Printer do
     end
   end
 
+  def status do
+    GenServer.call(PrinterServer, :status)
+  end
+
   def disconnect do
     GenServer.call(PrinterServer, :disconnect)
   end

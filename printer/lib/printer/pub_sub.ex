@@ -4,27 +4,19 @@ defmodule Printer.PubSub do
   """
 
   alias Phoenix.PubSub
+  alias Printer.Status
 
   def child_spec(_args) do
     Phoenix.PubSub.child_spec(name: __MODULE__)
   end
 
-  @topic_private "#{to_string(__MODULE__)}/private"
-  @topic_public "#{to_string(__MODULE__)}/public"
+  @printer_topic "printer"
 
-  def broadcast_private(message) do
-    PubSub.broadcast(__MODULE__, @topic_private, message)
+  def broadcast(%Status{} = status) do
+    PubSub.broadcast(__MODULE__, @printer_topic, status)
   end
 
-  def broadcast_public(message) do
-    PubSub.broadcast(__MODULE__, @topic_public, message)
-  end
-
-  def subscribe_private do
-    PubSub.subscribe(__MODULE__, @topic_private)
-  end
-
-  def subscribe_public do
-    PubSub.subscribe(__MODULE__, @topic_public)
+  def subscribe do
+    PubSub.subscribe(__MODULE__, @printer_topic)
   end
 end
