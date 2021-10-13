@@ -67,7 +67,11 @@ defmodule Printer.Server do
   end
 
   @impl GenServer
-  def handle_call({:print_start, path}, _from, state) do
+  def handle_call(
+        {:print_start, path},
+        _from,
+        state
+      ) do
     case start_print(state, path) do
       {:ok, state} ->
         {:reply, :ok, state}
@@ -88,7 +92,7 @@ defmodule Printer.Server do
       with :ok <- send_precheck(state, command) do
         send_command(state, command)
       else
-        :wating ->
+        :waiting ->
           state = add_to_send_queue(state, command)
 
           {:ok, state}

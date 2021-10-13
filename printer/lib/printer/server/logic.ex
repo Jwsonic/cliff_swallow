@@ -9,6 +9,7 @@ defmodule Printer.Server.Logic do
   alias Printer.Server.{Command, PrintJob, ResponseParser, State, Wait}
 
   require Logger
+  require Wait
 
   defguard is_state(state) when is_struct(state, State)
 
@@ -23,7 +24,7 @@ defmodule Printer.Server.Logic do
 
   defguard is_waiting(state)
            when is_state(state) and
-                  is_struct(state.wait, Wait)
+                  state.wait != %{}
 
   defguard is_printing(state)
            when is_state(state) and
@@ -127,6 +128,11 @@ defmodule Printer.Server.Logic do
   @spec send_precheck(state :: State.t(), command :: String.t()) ::
           :ok
           | {:error, reason :: String.t()}
+
+  def send_precheck(%State{wait: wait}, _command)
+      when is_waiting(wait) do
+    :waiting
+  end
 
   def send_precheck(state, command)
       when is_printing(state) do
