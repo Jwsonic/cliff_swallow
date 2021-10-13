@@ -66,8 +66,6 @@ printer = VirtualPrinter(settings, '.')
 VIRTUAL_PRINTER = Atom(b'virtual_printer')
 OK = Atom(b'ok')
 
-# TODO: re-add kill
-
 
 def start(pid):
     def read_forever():
