@@ -7,9 +7,10 @@ defmodule UiWeb.PrinterLive do
   def render(assigns) do
     ~H"""
     <%= if @printer.status == :disconnected do %>
-    <.available_connections></.available_connections>
+    <.available_connections available_connections={@available_connections}></.available_connections>
     <% end %>
-    <%= if @printer.status != :disconnected do %>
+    <%= if @printer.status == :connecting do %>Connecting<% end %>
+    <%= if @printer.status not in [:disconnected, :connecting] do %>
     <div>Current status: <%= @printer.status %></div>
     <div>Bed Temperature: <%= @printer.bed_temperature %></div>
     <div>Extruder Temperature: <%= @printer.extruder_temperature %></div>
@@ -23,7 +24,7 @@ defmodule UiWeb.PrinterLive do
   end
 
   def mount(_params, _session, socket) do
-    {:ok, status} = Printer.status()
+    {:ok, printer} = Printer.status()
     available_connections = Connection.available()
 
     if connected?(socket) do
@@ -32,7 +33,7 @@ defmodule UiWeb.PrinterLive do
 
     socket =
       socket
-      |> assign(:printer, status)
+      |> assign(:printer, printer)
       |> assign(:available_connections, available_connections)
 
     {:ok, socket}
@@ -46,10 +47,21 @@ defmodule UiWeb.PrinterLive do
     {:noreply, socket}
   end
 
-  def handle_event("connect", _value, socket) do
+  require Logger
+
+  def handle_event("connect", %{"name" => name}, socket) do
     if socket.assigns.printer.status == :disconnected do
-      Printer.Connection.Virtual.new()
-      |> Printer.connect()
+      connection =
+        Enum.find(
+          socket.assigns.available_connections,
+          fn c -> c.name == name end
+        )
+
+      if connection != nil do
+        conn = connection.build.()
+
+        Printer.connect(conn)
+      end
     end
 
     {:noreply, socket}
@@ -110,10 +122,13 @@ defmodule UiWeb.PrinterLive do
     <div>
       Available connections
       <%= for connection <- @available_connections do %>
-        <div
-          phx-click="connect"
-          phx-value-name={connection.name}
-        ><%= connection.name %></div>
+        <div>
+          <%= connection.name %>
+          <button
+            phx-click="connect"
+            phx-value-name={connection.name}
+          >Connect</button>
+        </div>
       <% end %>
     </div>
     """

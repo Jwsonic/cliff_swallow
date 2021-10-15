@@ -58,7 +58,24 @@ config :vintage_net,
        type: VintageNetEthernet,
        ipv4: %{method: :dhcp}
      }},
-    {"wlan0", %{type: VintageNetWiFi}}
+    {"wlan0",
+     %{
+       type: VintageNetWiFi,
+       vintage_net_wifi: %{
+         networks: [
+           %{
+             key_mgmt: :wpa_psk,
+             ssid:
+               System.get_env("SSID") ||
+                 raise("You must provide SSID env var"),
+             psk:
+               System.get_env("PSK") ||
+                 raise("You must provide PSK env var")
+           }
+         ]
+       },
+       ipv4: %{method: :dhcp}
+     }}
   ]
 
 config :mdns_lite,
@@ -89,6 +106,18 @@ config :mdns_lite,
       port: 4369
     }
   ]
+
+import_config "../../ui/config/config.exs"
+
+config :ui, UiWeb.Endpoint,
+  # Nerves root filesystem is read-only, so disable the code reloader
+  code_reloader: false,
+  http: [port: 80],
+  # Use compile-time Mix config instead of runtime environment variables
+  load_from_system_env: false,
+  # Start the server since we're running in a release instead of through `mix`
+  server: true,
+  url: [host: "nerves.local", port: 80]
 
 # Import target specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

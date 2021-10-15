@@ -7,21 +7,15 @@ defmodule Printer.Connection do
 
   def available do
     Circuits.UART.enumerate()
-    |> Map.keys()
-    |> Enum.map(fn name ->
+    |> Enum.reject(fn {_name, c} -> c == %{} end)
+    |> Enum.map(fn {name, _data} ->
       %{
         name: name,
         build: fn ->
-          Printer.Connection.Serial.new(name: name, speed: 115_200)
+          Printer.Connection.Serial.new(name: name, speed: 250_000)
         end
       }
     end)
-    |> Enum.concat([
-      %{
-        name: "Virtual",
-        build: fn -> Printer.Connection.Virtual.new() end
-      }
-    ])
   end
 
   def open(connection, printer_server \\ nil) do

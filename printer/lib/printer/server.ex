@@ -112,7 +112,7 @@ defmodule Printer.Server do
       )
       when (is_connected(state) or is_printing(state)) and
              is_from_connection(state, connection) do
-    Logger.info(data, label: :printer)
+    Logger.info("Printer sent: |#{data}|")
 
     state =
       case process_response(state, data) do
@@ -122,7 +122,7 @@ defmodule Printer.Server do
         {:send_next, state} ->
           send_next(state)
 
-        {:resend, command, state} ->
+        {{:resend, command}, state} ->
           resend_command(state, command)
       end
 

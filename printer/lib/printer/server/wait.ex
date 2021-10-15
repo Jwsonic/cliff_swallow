@@ -49,5 +49,5 @@ defmodule Printer.Server.Wait do
 
   def timeout(%Command{command: "M190" <> _rest}), do: 3 * 60 * 1_000
   def timeout(%Command{command: "M109" <> _rest}), do: 3 * 60 * 1_000
-  def timeout(_command), do: 1_000
+  def timeout(_command), do: 5_000
 end

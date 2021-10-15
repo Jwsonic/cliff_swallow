@@ -11,7 +11,8 @@ import Config
 # before starting your production server.
 config :ui, UiWeb.Endpoint,
   url: [host: "example.com", port: 80],
-  cache_static_manifest: "priv/static/cache_manifest.json"
+  cache_static_manifest: "priv/static/cache_manifest.json",
+  secret_key_base: "BquD2J5IkBhqhTGd8vBQerMuMRcx287/j9XMG4mwaj8/SY+MkSaUsO/Hk/XnqSjJ"
 
 # Do not print debug messages in production
 config :logger, level: :info

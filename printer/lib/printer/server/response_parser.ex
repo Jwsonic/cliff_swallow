@@ -33,7 +33,8 @@ defmodule Printer.Server.ResponseParser do
     |> post_traverse({:parse_float, []})
 
   extruder_temperature =
-    ignore(string("T:"))
+    ignore(optional(string(" ")))
+    |> ignore(string("T:"))
     |> concat(float)
     |> unwrap_and_tag(:extruder_temperature)
 
@@ -43,15 +44,17 @@ defmodule Printer.Server.ResponseParser do
     |> unwrap_and_tag(:bed_temperature)
 
   target_temp =
-    string("/ ")
+    string("/")
+    |> optional(string(" "))
     |> concat(float)
     |> string(" ")
 
   full_temperature =
     ignore(optional(string("ok ")))
     |> concat(extruder_temperature)
-    |> ignore(target_temp)
-    |> concat(bed_temperature)
+    |> ignore(optional(string(" ")))
+    |> ignore(optional(target_temp))
+    |> concat(optional(bed_temperature))
 
   error =
     ignore(string("Error:"))
@@ -71,7 +74,8 @@ defmodule Printer.Server.ResponseParser do
     |> unwrap_and_tag(:resend)
 
   busy =
-    ignore(string("busy:"))
+    ignore(optional(string("echo:")))
+    |> ignore(string("busy:"))
     |> ignore(optional(string(" ")))
     |> utf8_string([], min: 1)
     |> eos()

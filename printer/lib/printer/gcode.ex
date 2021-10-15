@@ -44,6 +44,10 @@ defmodule Printer.Gcode do
     "G28 #{params}"
   end
 
+  def g91 do
+    "G91"
+  end
+
   @doc """
   Builds a [set hotend temperature](https://marlinfw.org/docs/gcode/M104.html) command.
   """

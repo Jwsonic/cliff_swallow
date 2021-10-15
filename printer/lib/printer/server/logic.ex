@@ -104,16 +104,16 @@ defmodule Printer.Server.Logic do
   @spec connected(state :: State.t(), connection_server :: pid()) :: State.t()
   def connected(%State{} = state, connection_server) do
     interval_command = Gcode.m155(5)
+    relative_moves = Gcode.g91()
 
-    {_reply, state} =
-      state
-      |> update_state(%{
+    state =
+      update_state(state, %{
         connection_server: connection_server,
         status: :connected
       })
-      |> send_command(interval_command)
 
-    state
+    {_reply, state} = send_command(state, interval_command)
+    add_to_send_queue(state, relative_moves)
   end
 
   @spec close_connection(state :: State.t()) :: State.t()
@@ -321,7 +321,7 @@ defmodule Printer.Server.Logic do
 
   @spec process_response(state :: State.t(), response :: String.t()) ::
           {:send_next, state :: State.t()}
-          | {:resend, command :: Command.t(), state :: State.t()}
+          | {{:resend, command :: Command.t()}, state :: State.t()}
           | {:ignore, state :: State.t()}
   def process_response(
         %State{} = state,
@@ -353,7 +353,7 @@ defmodule Printer.Server.Logic do
 
       {command, wait} ->
         state = update_state(state, %{wait: wait})
-        {:resend, command, state}
+        {{:resend, command}, state}
     end
   end
 
@@ -433,10 +433,11 @@ defmodule Printer.Server.Logic do
 
   def check_timeout(
         %State{
-          timeout_reference: timeout_reference
+          timeout_reference: current_reference
         },
         timeout_reference
-      ) do
+      )
+      when current_reference == timeout_reference do
     :retry
   end
 
